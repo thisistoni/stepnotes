@@ -15,8 +15,8 @@ export const SVG_FONT_MEDIUM = fonts.display600;
  * Shoe-print outlines drawn for a LEFT foot, centred on (0,0), toes pointing up (negative y).
  * The big-toe (inner) side is +x. Size: ~1 unit wide, 2.6 units long (y -1.3 … 1.3); right feet
  * are the mirror image. Each print is a sole and a separate heel mark behind a gap, as two
- * sub-paths of ONE path so a sticker still costs two <Path>s. The gap is narrower than the white
- * sticker outline, so on a sticker it reads as a white cut, and dashed ghosts show both parts.
+ * sub-paths of ONE path (SHOE_PATH / HEEL_PATH) for ghosts and glyphs; stickers draw the heel's tip
+ * separately with a thinner outline (see STICKER_PARTS). On a sticker the gap reads as a white cut.
  */
 
 /**
@@ -37,20 +37,29 @@ export const SHOE_PARTS = {
 } as const;
 
 /**
- * High heel (follower): an almond / leaf-shaped sole with a softly pointed toe on the big-toe
- * side, widest at the ball, tapering into a narrow shank, then a small separate heel tip.
+ * High heel (follower): a slim, lopsided leaf (about 2.3× as long as wide). The toe point sits on
+ * the big-toe side, the inner edge is flatter, the outer edge fuller, and the sole narrows
+ * gradually into a waist that runs almost to the heel tip: a small solid block behind a gap.
  */
 export const HEEL_PARTS = {
-  // pointed toe → inner ball → straight inner edge into the shank → fuller outer edge → toe
+  // Sampled from a leaf profile (widest ~38% down, inner edge falling linearly, outer edge eased),
+  // so it is many short curves: toe point → flatter inner edge → waist → fuller outer edge → toe.
   sole:
-    'M0.24,-1.3 C0.3,-1.22 0.4,-1.08 0.45,-0.9 C0.49,-0.78 0.49,-0.7 0.47,-0.58 ' +
-    'C0.43,-0.24 0.18,0.22 0.06,0.62 ' +
-    'L-0.14,0.62 C-0.2,0.3 -0.43,0 -0.49,-0.4 ' +
-    'C-0.55,-0.78 -0.42,-1.08 -0.05,-1.25 C0.06,-1.29 0.16,-1.3 0.24,-1.3 Z',
-  // heel tip, set a little to the outer side under the heel bone; a touch wider than the shank
-  // so it survives the white outline at small sizes
-  heel: 'M-0.23,0.8 L0.15,0.8 C0.17,0.98 0.16,1.2 0.08,1.27 C0.02,1.31 -0.1,1.31 -0.16,1.27 C-0.24,1.2 -0.25,0.98 -0.23,0.8 Z',
+    'M0.16,-1.3 C0.17,-1.28 0.23,-1.21 0.25,-1.17 C0.28,-1.13 0.29,-1.09 0.31,-1.04 ' +
+    'C0.33,-1 0.34,-0.96 0.35,-0.91 C0.36,-0.86 0.37,-0.81 0.38,-0.76 C0.38,-0.71 0.39,-0.66 0.39,-0.61 ' +
+    'C0.38,-0.56 0.38,-0.51 0.37,-0.45 C0.35,-0.4 0.34,-0.34 0.32,-0.28 C0.31,-0.23 0.29,-0.17 0.28,-0.11 ' +
+    'C0.26,-0.05 0.25,0.01 0.23,0.07 C0.21,0.13 0.2,0.2 0.18,0.27 C0.16,0.33 0.14,0.4 0.13,0.47 ' +
+    'C0.11,0.54 0.1,0.65 0.09,0.69 L-0.15,0.66 ' +
+    'C-0.15,0.63 -0.14,0.52 -0.14,0.44 C-0.14,0.37 -0.16,0.3 -0.18,0.23 C-0.2,0.16 -0.23,0.09 -0.25,0.02 ' +
+    'C-0.28,-0.04 -0.31,-0.1 -0.33,-0.17 C-0.36,-0.23 -0.38,-0.29 -0.4,-0.35 C-0.41,-0.41 -0.42,-0.47 -0.42,-0.53 ' +
+    'C-0.43,-0.58 -0.42,-0.64 -0.41,-0.69 C-0.4,-0.74 -0.38,-0.79 -0.35,-0.83 C-0.33,-0.88 -0.3,-0.93 -0.27,-0.97 ' +
+    'C-0.24,-1.01 -0.2,-1.05 -0.16,-1.09 C-0.12,-1.13 -0.09,-1.17 -0.03,-1.2 C0.01,-1.24 0.12,-1.28 0.16,-1.3 Z',
+  // heel tip, set a little to the outer side under the heel bone
+  heel: 'M-0.22,0.86 L0.15,0.86 C0.17,1 0.16,1.18 0.1,1.25 C0.05,1.3 -0.11,1.3 -0.16,1.25 C-0.22,1.18 -0.24,1 -0.22,0.86 Z',
 } as const;
+
+/** The heel tip's sticker outline, as a fraction of the sole's, so the tip reads as a solid block. */
+export const HEEL_TIP_OUTLINE = 0.45;
 
 export const SHOE_PATH = `${SHOE_PARTS.sole} ${SHOE_PARTS.heel}`;
 export const HEEL_PATH = `${HEEL_PARTS.sole} ${HEEL_PARTS.heel}`;
@@ -104,8 +113,21 @@ export const LETTER_SIZE = 0.62;
 const ORIGIN: FootPos = { x: 0, y: 0, rot: 0 };
 
 /**
+ * Sticker pieces per style: [path, outline width factor]. The flat shoe is one path; the heel's
+ * small tip gets its own path with a thinner outline so it reads as a solid block, not a cup.
+ */
+const STICKER_PARTS: Record<FootStyle, readonly (readonly [string, number])[]> = {
+  shoe: [[SHOE_PATH, 1]],
+  heel: [
+    [HEEL_PARTS.sole, 1],
+    [HEEL_PARTS.heel, HEEL_TIP_OUTLINE],
+  ],
+};
+
+/**
  * One footprint. Solid feet are stickers: an offset darker lip, the coloured face and a white
- * outline (2 paths). Outline feet are a single dashed path. Cheap enough for thumbnails.
+ * outline (2 paths, 4 for the heel). Outline feet are a single dashed path. Cheap enough for
+ * thumbnails.
  */
 export const FootShape = memo(function FootShape({
   foot,
@@ -152,16 +174,21 @@ export const FootShape = memo(function FootShape({
   }
 
   const sw = stroke || lip ? strokeWidth : 0;
+  const parts = STICKER_PARTS[style];
   return (
     <G opacity={opacity}>
       {lip && (
         <G transform={`translate(${pos.x} ${pos.y + STICKER.lip}) rotate(${pos.rot}) scale(${flip} 1)`}>
-          <Path d={d} fill={lip} stroke={lip} strokeWidth={sw} strokeLinejoin="round" />
+          {parts.map(([pd, k]) => (
+            <Path key={k} d={pd} fill={lip} stroke={lip} strokeWidth={sw * k} strokeLinejoin="round" />
+          ))}
         </G>
       )}
       <G transform={place}>
         <G transform={`scale(${flip} 1)`}>
-          <Path d={d} fill={color} stroke={stroke ?? 'none'} strokeWidth={sw} strokeLinejoin="round" />
+          {parts.map(([pd, k]) => (
+            <Path key={k} d={pd} fill={color} stroke={stroke ?? 'none'} strokeWidth={sw * k} strokeLinejoin="round" />
+          ))}
         </G>
         {showLetter && letterColor && (
           <SvgText x={0} y={-0.48 + letterSize * 0.36} fontSize={letterSize} fontFamily={SVG_FONT} fill={letterColor} textAnchor="middle">
