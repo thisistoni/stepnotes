@@ -60,8 +60,3 @@ export interface Dance {
   createdAt: number;
   updatedAt: number;
 }
-
-export const ROLE_LABEL: Record<Role, string> = {
-  leader: 'Leader',
-  follower: 'Follower',
-};

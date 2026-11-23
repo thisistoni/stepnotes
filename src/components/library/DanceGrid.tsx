@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { Entrance } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { space } from '@/lib/theme';
 import type { Dance } from '@/lib/types';
 
@@ -25,8 +26,9 @@ export function DanceGrid({ dances, onOpen, startIndex = 0 }: { dances: Dance[];
 }
 
 export function DanceGridSkeleton({ count = 2 }: { count?: number }) {
+  const t = useT();
   return (
-    <View style={[s.row, s.grid]} accessibilityLabel="Loading your dances">
+    <View style={[s.row, s.grid]} accessibilityLabel={t.library.loading}>
       {Array.from({ length: count }, (_, i) => (
         <DanceCardSkeleton key={i} />
       ))}

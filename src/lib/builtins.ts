@@ -1,3 +1,4 @@
+import type { StarterId, Strings } from './i18n/en';
 import { DEFAULT_START, toPartner } from './pattern';
 import type { Dance, Foot, Pattern, Step, StepKind } from './types';
 
@@ -22,20 +23,13 @@ function pattern(steps: S[], start = DEFAULT_START): Pattern {
   };
 }
 
-function dance(
-  id: string,
-  name: string,
-  style: string,
-  description: string,
-  bpm: number,
-  beatsPerBar: number,
-  leader: Pattern,
-): Dance {
+/** Choreography only: names, styles, descriptions and notes come from the dictionaries. */
+function dance(id: StarterId, bpm: number, beatsPerBar: number, leader: Pattern): Dance {
   return {
     id,
-    name,
-    style,
-    description,
+    name: '',
+    style: '',
+    description: '',
     bpm,
     beatsPerBar,
     roles: { leader, follower: toPartner(leader) },
@@ -93,41 +87,38 @@ const chaCha = pattern(
   { L: { x: -1.2, y: 0, rot: 0 }, R: { x: 1.2, y: 0, rot: 0 } },
 );
 
-export const BUILT_IN_DANCES: Dance[] = [
-  dance(
-    'builtin-salsa-basic',
-    'Salsa Basic (On1)',
-    'Salsa',
-    'Forward and back basic. Break forward on 1 with the left foot, pause on 4 and 8.',
-    180,
-    4,
-    salsa,
-  ),
-  dance(
-    'builtin-bachata-basic',
-    'Bachata Side Basic',
-    'Bachata',
-    'Three steps to the side and a tap (often with a hip pop) on 4 and 8.',
-    128,
-    4,
-    bachata,
-  ),
-  dance(
-    'builtin-waltz-box',
-    'Waltz Box Step',
-    'Ballroom',
-    'The classic box: forward–side–close, back–side–close. Rise and fall on 2 and 3.',
-    84,
-    3,
-    waltzBox,
-  ),
-  dance(
-    'builtin-chacha-basic',
-    'Cha-Cha Basic',
-    'Latin',
-    'Rock step on 2–3, then the chassé "4 & 1" (cha-cha-cha) to the side.',
-    120,
-    4,
-    chaCha,
-  ),
+/** The starter dances without their texts (ids, tempo and steps never change with the language). */
+const BASE: Dance[] = [
+  dance('builtin-salsa-basic', 180, 4, salsa),
+  dance('builtin-bachata-basic', 128, 4, bachata),
+  dance('builtin-waltz-box', 84, 3, waltzBox),
+  dance('builtin-chacha-basic', 120, 4, chaCha),
 ];
+
+export const BUILT_IN_IDS: ReadonlySet<string> = new Set(BASE.map((d) => d.id));
+
+const cache = new WeakMap<Strings, Dance[]>();
+
+/**
+ * The starter dances in one language: name, style, description and step notes from `t.starters`;
+ * ids and choreography identical in every language. Cached per dictionary (stable identities).
+ */
+export function builtInDances(t: Strings): Dance[] {
+  const hit = cache.get(t);
+  if (hit) return hit;
+  const withNotes = (p: Pattern, notes: Partial<Record<number, string>>): Pattern => ({
+    ...p,
+    steps: p.steps.map((st, i) => {
+      const note = notes[i];
+      return note ? { ...st, note } : st;
+    }),
+  });
+  const out = BASE.map((d): Dance => {
+    const text = t.starters[d.id as StarterId];
+    const roles: Dance['roles'] = { leader: withNotes(d.roles.leader, text.notes.leader) };
+    if (d.roles.follower) roles.follower = withNotes(d.roles.follower, text.notes.follower);
+    return { ...d, name: text.name, style: text.style, description: text.description, roles };
+  });
+  cache.set(t, out);
+  return out;
+}

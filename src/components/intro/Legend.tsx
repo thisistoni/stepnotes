@@ -5,16 +5,13 @@ import Svg from 'react-native-svg';
 
 import { FootShape } from '@/components/FootShape';
 import { Text, useReducedMotion } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { colors, motion, radius, roleTheme, ROLE_COLOR, space } from '@/lib/theme';
 import type { FootStyle, Role } from '@/lib/types';
 
 import type { LessonPhase } from './useDemoLesson';
 
-const ROWS: { key: LessonPhase; title: string; body: string }[] = [
-  { key: 'solid', title: 'Solid foot', body: 'Your weight is on it' },
-  { key: 'light', title: 'Light foot', body: 'Free — about to move' },
-  { key: 'dashed', title: 'Dashed outline', body: 'Where you’ll step' },
-];
+const ROWS: LessonPhase[] = ['solid', 'light', 'dashed'];
 
 const SAMPLE_H = 34;
 
@@ -45,12 +42,13 @@ const Row = memo(function Row({
   role,
   footStyle,
 }: {
-  row: (typeof ROWS)[number];
+  row: LessonPhase;
   active: boolean;
   role: Role;
   footStyle: FootStyle;
 }) {
   const reduced = useReducedMotion();
+  const { title, body } = useT().lesson.legend[row];
   const tone = ROLE_COLOR[role];
   const on = useSharedValue(active ? 1 : 0);
   const pop = useSharedValue(1);
@@ -67,21 +65,21 @@ const Row = memo(function Row({
     <View
       style={s.row}
       accessible
-      accessibilityLabel={`${row.title}: ${row.body}`}
+      accessibilityLabel={`${title}: ${body}`}
       accessibilityState={{ selected: active }}
       aria-selected={active}
-      testID={`legend-${row.key}${active ? '-active' : ''}`}
+      testID={`legend-${row}${active ? '-active' : ''}`}
     >
       <Animated.View style={[StyleSheet.absoluteFill, s.highlight, { backgroundColor: tone.wash, borderColor: tone.border }, highlight]} />
       <Animated.View style={[s.tile, { backgroundColor: colors.card, borderColor: active ? tone.border : colors.cardBorder }, sample]}>
-        <Sample kind={row.key} role={role} footStyle={footStyle} />
+        <Sample kind={row} role={role} footStyle={footStyle} />
       </Animated.View>
       <View style={s.text}>
         <Text variant="label" numberOfLines={1}>
-          {row.title}
+          {title}
         </Text>
         <Text variant="small" color="ink2" numberOfLines={2}>
-          {row.body}
+          {body}
         </Text>
       </View>
     </View>
@@ -100,7 +98,7 @@ export function Legend({ phase, role, footStyle }: LegendProps) {
   return (
     <View style={s.list}>
       {ROWS.map((r) => (
-        <Row key={r.key} row={r} active={phase === r.key} role={role} footStyle={footStyle} />
+        <Row key={r} row={r} active={phase === r} role={role} footStyle={footStyle} />
       ))}
     </View>
   );

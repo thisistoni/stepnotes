@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DanceGrid, DanceGridSkeleton } from '@/components/library/DanceGrid';
+import { LanguageSheet } from '@/components/library/LanguageSheet';
 import { LessonCard } from '@/components/library/LessonCard';
 import { MyDancesEmpty } from '@/components/library/MyDancesEmpty';
 import { NoMatches } from '@/components/library/NoMatches';
@@ -10,11 +11,14 @@ import { SectionHeader } from '@/components/library/SectionHeader';
 import { StyleFilterChips } from '@/components/library/StyleFilterChips';
 import { matches, useStyleFilters } from '@/components/library/useLibrary';
 import { Entrance, Fab, Header, IconButton, Screen, SearchField } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { useDances } from '@/lib/store';
 import { space } from '@/lib/theme';
 
 export default function Library() {
   const { dances, custom, ready } = useDances();
+  const t = useT();
+  const [languageOpen, setLanguageOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [styleKey, setStyleKey] = useState<string | null>(null);
 
@@ -38,19 +42,24 @@ export default function Library() {
   const noMatches = ready && filtering && mine.length === 0 && starters.length === 0;
 
   return (
-    <Screen padded={false} fab={<Fab label="Create" onPress={create} testID="fab-create" />} testID="library">
+    <Screen padded={false} fab={<Fab label={t.library.create} onPress={create} testID="fab-create" />} testID="library">
       <Header
         large
         eyebrow="StepNotes"
-        title="Your dances"
-        right={<IconButton icon="import" label="Import a dance" onPress={() => router.push('/import')} testID="import-button" />}
+        title={t.library.title}
+        right={
+          <>
+            <IconButton icon="globe" label={t.language.button} onPress={() => setLanguageOpen(true)} testID="language-button" />
+            <IconButton icon="import" label={t.library.import} onPress={() => router.push('/import')} testID="import-button" />
+          </>
+        }
       />
       <Entrance index={0} style={s.px}>
         <SearchField
           value={query}
           onChangeText={setQuery}
-          placeholder="Search dances or styles"
-          accessibilityLabel="Search dances or styles"
+          placeholder={t.library.searchPlaceholder}
+          accessibilityLabel={t.library.searchPlaceholder}
           style={s.search}
           testID="search"
         />
@@ -68,17 +77,17 @@ export default function Library() {
           <>
             {!ready ? (
               <>
-                <SectionHeader title="My dances" />
+                <SectionHeader title={t.library.myDances} />
                 <DanceGridSkeleton />
               </>
             ) : mine.length > 0 ? (
               <>
-                <SectionHeader title="My dances" count={mine.length} />
+                <SectionHeader title={t.library.myDances} count={mine.length} />
                 <DanceGrid dances={mine} onOpen={open} startIndex={2} />
               </>
             ) : custom.length === 0 && !filtering ? (
               <>
-                <SectionHeader title="My dances" />
+                <SectionHeader title={t.library.myDances} />
                 <Entrance index={2}>
                   <MyDancesEmpty onCreate={create} />
                 </Entrance>
@@ -87,7 +96,7 @@ export default function Library() {
 
             {starters.length > 0 && (
               <>
-                <SectionHeader title="Starter dances" count={starters.length} />
+                <SectionHeader title={t.library.starters} count={starters.length} />
                 <DanceGrid dances={starters} onOpen={open} startIndex={3} />
               </>
             )}
@@ -98,6 +107,7 @@ export default function Library() {
           <LessonCard onPress={() => router.push('/intro?lesson=1')} />
         </Entrance>
       </View>
+      <LanguageSheet visible={languageOpen} onClose={() => setLanguageOpen(false)} />
     </Screen>
   );
 }

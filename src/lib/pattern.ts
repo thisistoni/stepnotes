@@ -1,3 +1,4 @@
+import type { Strings } from './i18n/en';
 import type { Foot, FootPos, Pattern, Step } from './types';
 
 export const otherFoot = (f: Foot): Foot => (f === 'L' ? 'R' : 'L');
@@ -136,58 +137,54 @@ export function mirrorPattern(pattern: Pattern): Pattern {
   };
 }
 
-const FOOT_NAME: Record<Foot, string> = { L: 'Left', R: 'Right' };
+/** Which way a step travels: forward/back and/or left/right (both = diagonal). */
+export interface StepDirection {
+  fb: 'forward' | 'back' | null;
+  side: 'left' | 'right' | null;
+}
 
-/** Human readable description of a step, e.g. "Left foot steps forward". */
-export function describeStep(step: Step, before: FeetState): string {
-  if (step.kind === 'hold') return 'Hold – pause, no weight change';
+/**
+ * What a step does, as data: the dictionaries turn this into a sentence in their own word order
+ * (`t.step.describe`). `turn` is the signed rotation in degrees (positive = right), 0 below 10°.
+ *   inPlace – the foot stays where it is · close – it ends next to the other foot · move – anything else
+ */
+export type StepInfo =
+  | { kind: 'hold' }
+  | { kind: 'step' | 'tap'; foot: Foot; motion: 'inPlace' | 'close' | 'move'; dir: StepDirection; turn: number };
+
+export function analyzeStep(step: Step, before: FeetState): StepInfo {
+  if (step.kind === 'hold') return { kind: 'hold' };
   const from = before.pos[step.foot];
   const dx = step.to.x - from.x;
   const dy = step.to.y - from.y;
-  const dist = Math.hypot(dx, dy);
-  const foot = `${FOOT_NAME[step.foot]} foot`;
-  const turn = Math.round(shortestAngleDelta(from.rot, step.to.rot));
-  const turnText = Math.abs(turn) >= 10 ? `, turning ${Math.abs(turn)}° ${turn > 0 ? 'right' : 'left'}` : '';
+  const rawTurn = Math.round(shortestAngleDelta(from.rot, step.to.rot));
+  const turn = Math.abs(rawTurn) >= 10 ? rawTurn : 0;
+  const base = { kind: step.kind, foot: step.foot, turn };
+  if (Math.hypot(dx, dy) < 0.3) return { ...base, motion: 'inPlace', dir: { fb: null, side: null } };
 
-  if (dist < 0.3) {
-    const verb = step.kind === 'tap' ? 'taps in place' : 'steps in place (weight change)';
-    return `${foot} ${verb}${turnText}`;
-  }
-
-  // Is the foot closing next to the other foot?
-  const other = before.pos[otherFoot(step.foot)];
-  const closing = Math.abs(step.to.y - other.y) < 0.5 && Math.abs(step.to.x - other.x) < 1.6;
-
-  let dir: string;
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
   const fb = dy < 0 ? 'forward' : 'back';
   const side = dx < 0 ? 'left' : 'right';
-  if (ay > ax * 3.5) dir = fb;
-  else if (ax > ay * 3.5) dir = `to the ${side}`;
-  else dir = `diagonally ${fb} ${side}`;
+  const dir: StepDirection = ay > ax * 3.5 ? { fb, side: null } : ax > ay * 3.5 ? { fb: null, side } : { fb, side };
 
-  if (step.kind === 'tap') return `${foot} taps ${closing ? 'next to the other foot' : dir} (no weight)${turnText}`;
-  if (closing) return `${foot} closes next to the ${FOOT_NAME[otherFoot(step.foot)].toLowerCase()} foot${turnText}`;
-  return `${foot} steps ${dir}${turnText}`;
+  // Is the foot closing next to the other foot?
+  const other = before.pos[otherFoot(step.foot)];
+  const closing = Math.abs(step.to.y - other.y) < 0.5 && Math.abs(step.to.x - other.x) < 1.6;
+  return { ...base, motion: closing ? 'close' : 'move', dir };
+}
+
+/** Plain-language description, e.g. "Left foot steps forward" / "Der linke Fuß geht nach vorne". */
+export function describeStep(step: Step, before: FeetState, t: Strings): string {
+  return t.step.describe(analyzeStep(step, before));
 }
 
 /**
  * A shorter description for tight spaces, shown next to an L / R badge (the Both view shows two
- * at once), so the foot is not repeated: "Left foot closes next to the right foot" → "Closes",
- * "Right foot steps back" → "Steps back", "Hold – pause…" → "Hold".
+ * at once), so the foot is not repeated: "Closes", "Steps back", "Hold, no weight change".
  */
-export function describeStepShort(step: Step, before: FeetState): string {
-  if (step.kind === 'hold') return 'Hold, no weight change';
-  const s = describeStep(step, before)
-    .replace(/^(Left|Right) foot /, '')
-    .replace(/ next to the (left|right|other) foot/, '')
-    .replace(' (weight change)', '')
-    .replace('diagonally ', 'diagonal ')
-    .replace(/taps (.*)\(no weight\)/, 'taps $1')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return s.charAt(0).toUpperCase() + s.slice(1);
+export function describeStepShort(step: Step, before: FeetState, t: Strings): string {
+  return t.step.short(analyzeStep(step, before));
 }
 
 /** Suggest the next count label, e.g. after "3" comes "4", after "8" comes "1". */
@@ -343,13 +340,9 @@ export function slicePattern(pattern: Pattern, from: number, to: number, states:
   return { start: { L: at.pos.L, R: at.pos.R }, steps: pattern.steps.slice(from, to) };
 }
 
-/** What a voice should say for a count label ("&" → "and", "a" → "ah"). */
-export function spokenCount(count: string): string {
-  const c = count.trim().toLowerCase();
-  if (c === '&' || c === 'and') return 'and';
-  if (c === 'a') return 'ah';
-  if (c === 'e') return 'ee';
-  return count.trim() || 'step';
+/** What a voice should say for a count label ("&" → "and" / "und"; numbers are left to the voice). */
+export function spokenCount(count: string, t: Strings): string {
+  return t.spoken(count);
 }
 
 /** Index of the step playing at `beat` (-1 = start position). Runs on either thread. */

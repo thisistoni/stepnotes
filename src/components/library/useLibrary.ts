@@ -30,9 +30,3 @@ export function matches(d: Dance, query: string, styleKey: string | null) {
   const hay = `${d.name} ${d.style}`.toLowerCase();
   return words.every((w) => hay.includes(w));
 }
-
-export function stepCountLabel(d: Dance) {
-  const n = d.roles.leader.steps.length;
-  // non-breaking spaces keep "104 bpm" together when a narrow card wraps the line
-  return `${n}\u00A0${n === 1 ? 'step' : 'steps'} · ${d.bpm}\u00A0bpm`;
-}

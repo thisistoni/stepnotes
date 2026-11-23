@@ -6,8 +6,9 @@ import { StepDiagram } from '@/components/StepDiagram';
 import { Icon, Segmented, Stage, Text } from '@/components/ui';
 import { layoutChart, layoutLive, type Bounds } from '@/lib/chartLayout';
 import { barRanges, computeStates, slicePattern } from '@/lib/pattern';
+import { useT } from '@/lib/i18n';
 import { colors, radius, roleTheme, ROLE_COLOR, withAlpha, type ColorSet } from '@/lib/theme';
-import { ROLE_LABEL, type FootStyle, type Pattern, type Role } from '@/lib/types';
+import type { FootStyle, Pattern, Role } from '@/lib/types';
 
 export type StageMode = 'live' | 'overview';
 /** 'all' or a bar number (0-based, as in `barRanges`) */
@@ -35,19 +36,15 @@ interface Props {
   height: number;
 }
 
-const MODE_OPTIONS = [
-  { value: 'live' as const, label: 'Animate', icon: 'play' as const, accessibilityLabel: 'Animate the steps' },
-  { value: 'overview' as const, label: 'Chart', icon: 'chart' as const, accessibilityLabel: 'Show the step chart' },
-];
-
 /** Facing indicator: which way is forward on the diagram ("Mirrored" in mirror mode). */
 function FacingTag({ tone, mirrored, compact }: { tone: ColorSet; mirrored: boolean; compact?: boolean }) {
-  const label = mirrored ? 'Mirrored' : 'Facing';
+  const t = useT();
+  const label = mirrored ? t.player.mirrored : t.player.facing;
   return (
     <View
       style={[s.facing, compact && s.facingCompact]}
       accessible
-      accessibilityLabel={mirrored ? 'Mirrored view: left and right are swapped. Forward is up.' : 'Forward is up the screen'}
+      accessibilityLabel={mirrored ? t.player.mirroredA11y : t.player.facingA11y}
     >
       <Icon name={mirrored ? 'mirror' : 'arrow-up'} size={13} color={tone.deep} strokeWidth={3} />
       {!compact && (
@@ -61,10 +58,11 @@ function FacingTag({ tone, mirrored, compact }: { tone: ColorSet; mirrored: bool
 
 function RoleTag({ role }: { role: Role }) {
   const c = ROLE_COLOR[role];
+  const t = useT();
   return (
     <View style={[s.roleTag, { backgroundColor: c.base }]}>
       <Text variant="overline" color={c.on} style={s.roleTagText}>
-        {ROLE_LABEL[role]}
+        {t.roles[role]}
       </Text>
     </View>
   );
@@ -168,6 +166,7 @@ export const PlayerStage = memo(function PlayerStage({
   height,
 }: Props) {
   const { width: winW } = useWindowDimensions();
+  const t = useT();
   const narrow = winW < 370;
   const charts = useMemo(() => roles.map((r) => chartFor(r.pattern, beatsPerBar, chartBar)), [roles, beatsPerBar, chartBar]);
   // Both: side by side (the default) or stacked, whichever draws the feet bigger. Wide patterns
@@ -185,11 +184,14 @@ export const PlayerStage = memo(function PlayerStage({
   const toggle = (
     <Segmented
       variant="compact"
-      options={MODE_OPTIONS}
+      options={[
+        { value: 'live' as const, label: t.player.animate, icon: 'play' as const, accessibilityLabel: t.player.animateA11y },
+        { value: 'overview' as const, label: t.player.chart, icon: 'chart' as const, accessibilityLabel: t.player.chartA11y },
+      ]}
       value={mode}
       onChange={onModeChange}
-      itemWidth={94}
-      label="Diagram view"
+      itemWidth={t.player.animate.length > 7 || t.player.chart.length > 7 ? 106 : 94}
+      label={t.player.view}
       testID="mode-toggle"
     />
   );

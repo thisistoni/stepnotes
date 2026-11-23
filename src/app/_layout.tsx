@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ErrorScreen } from '@/components/ErrorScreen';
 import { ConfirmHost, ToastHost } from '@/components/ui';
+import { I18nProvider } from '@/lib/i18n';
 import { PrefsProvider, usePrefs } from '@/lib/prefs';
 import { DanceProvider, useDances } from '@/lib/store';
 import { colors } from '@/lib/theme';
@@ -48,14 +49,17 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={s.root}>
       <PrefsProvider>
-        <DanceProvider>
-          <ToastHost>
-            <ConfirmHost>
-              <StatusBar style="dark" />
-              <AppStack fontsReady={fontsLoaded || !!fontError} />
-            </ConfirmHost>
-          </ToastHost>
-        </DanceProvider>
+        {/* the language comes from prefs, which are loaded before anything renders (no flash) */}
+        <I18nProvider>
+          <DanceProvider>
+            <ToastHost>
+              <ConfirmHost>
+                <StatusBar style="dark" />
+                <AppStack fontsReady={fontsLoaded || !!fontError} />
+              </ConfirmHost>
+            </ToastHost>
+          </DanceProvider>
+        </I18nProvider>
       </PrefsProvider>
     </GestureHandlerRootView>
   );

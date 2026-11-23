@@ -18,23 +18,23 @@ import { DanceNotFound } from '@/components/DanceNotFound';
 import { RevealProvider, useRevealScroll } from '@/components/editor/reveal';
 import { StepStrip } from '@/components/editor/StepStrip';
 import { Entrance, goBackOrHome, hapticNotify, Screen, Segmented, Skeleton, useConfirm, useToast } from '@/components/ui';
+import { errorText, useT } from '@/lib/i18n';
 import { computeStates, nextCount } from '@/lib/pattern';
-import { PersistError } from '@/lib/persist';
 import { newDance, useDances } from '@/lib/store';
 import { DEFAULT_FOOT_STYLE, ROLE_COLOR, space, styleColor } from '@/lib/theme';
 import type { Dance, Role } from '@/lib/types';
 import { copyForEditing, useDanceDraft } from '@/lib/useDanceDraft';
-import { DanceValidationError } from '@/lib/validate';
 
 export default function EditorRoute() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const { get, ready, isBuiltIn } = useDances();
+  const t = useT();
   const isNew = id === 'new';
 
   // Wait for the store, or "Save" on a not-yet-loaded dance would create a new one.
   if (!ready) {
     return (
-      <Screen header={<EditorTopBar title={isNew ? 'New dance' : 'Edit dance'} onClose={goBackOrHome} />}>
+      <Screen header={<EditorTopBar title={isNew ? t.editor.newTitle : t.editor.editTitle} onClose={goBackOrHome} />}>
         <Skeleton height={68} radius={24} />
         <Skeleton height={320} radius={28} style={s.loadingStage} />
       </Screen>
@@ -50,14 +50,14 @@ export default function EditorRoute() {
 }
 
 /** Normalise what the user typed before storing. */
-function finalize(d: Dance): Dance {
+function finalize(d: Dance, untitled: string): Dance {
   const fixCounts = (p: Dance['roles']['leader']) => ({
     ...p,
     steps: p.steps.map((st, i) => (st.count.trim() ? st : { ...st, count: nextCount(p.steps.slice(0, i), d.beatsPerBar) })),
   });
   return {
     ...d,
-    name: d.name.trim() || 'Untitled dance',
+    name: d.name.trim() || untitled,
     style: d.style.trim(),
     description: d.description.trim(),
     videoUrl: d.videoUrl?.trim() || undefined,
@@ -69,24 +69,25 @@ function finalize(d: Dance): Dance {
 }
 
 const URL_RE = /^https?:\/\/\S+\.\S+$/i;
-function videoProblem(url: string | undefined): string | null {
+/** true when a video link was typed that is not a web address */
+function videoProblem(url: string | undefined): boolean {
   const v = url?.trim();
-  if (!v || URL_RE.test(v)) return null;
-  return 'This doesn’t look like a web link. Paste the full address, starting with https://';
+  return !!v && !URL_RE.test(v);
 }
 
 function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
   const isNew = !existing;
   const { save } = useDances();
+  const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
   const { height: winH } = useWindowDimensions();
-  const [initial] = useState<Dance>(() => (existing ? existing : source ? copyForEditing(source) : newDance()));
+  const [initial] = useState<Dance>(() => (existing ? existing : source ? copyForEditing(source, t) : newDance()));
   const d = useDanceDraft(initial);
   const { draft, role, pattern, sel, startFoot } = d;
 
   const [detailsOpen, setDetailsOpen] = useState(isNew && !source);
-  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState(false);
   const [pressing, setPressing] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -97,10 +98,10 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
   const askDiscard = useCallback(
     () =>
       confirm({
-        title: 'Discard your changes?',
-        message: isNew ? 'This dance has not been saved yet.' : 'Your edits since the last save will be lost.',
-        confirmLabel: 'Discard',
-        cancelLabel: 'Keep editing',
+        title: (tr) => tr.editor.discardTitle,
+        message: (tr) => (isNew ? tr.editor.discardNew : tr.editor.discardEdits),
+        confirmLabel: (tr) => tr.editor.discard,
+        cancelLabel: (tr) => tr.editor.keepEditing,
         destructive: true,
         icon: 'trash',
       }),
@@ -122,20 +123,19 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
   };
 
   const onSave = async () => {
-    const problem = videoProblem(draft.videoUrl);
-    if (problem) {
-      setVideoError(problem);
+    if (videoProblem(draft.videoUrl)) {
+      setVideoError(true);
       setDetailsOpen(true);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
-      toast.show({ message: 'Check the video link first', icon: 'alert' });
+      toast.show({ message: (tr) => tr.editor.checkVideo, icon: 'alert' });
       hapticNotify('error');
       return;
     }
     setSaving(true);
     try {
-      const saved = await save(finalize(draft));
+      const saved = await save(finalize(draft, t.common.untitled));
       hapticNotify('success');
-      toast.show({ message: isNew ? 'Dance saved' : 'Changes saved', icon: 'check' });
+      toast.show({ message: (tr) => (isNew ? tr.editor.saved : tr.editor.changesSaved), icon: 'check' });
       setLeaving(true);
       allowLeave();
       if (isNew) router.replace(`/dance/${saved.id}`);
@@ -143,10 +143,7 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
       else router.replace(`/dance/${saved.id}`);
     } catch (e) {
       setSaving(false);
-      toast.show({
-        message: e instanceof DanceValidationError || e instanceof PersistError ? e.message : 'Could not save. Please try again.',
-        icon: 'alert',
-      });
+      toast.show({ message: (tr) => errorText(e, tr, tr.editor.saveFailed), icon: 'alert' });
     }
   };
 
@@ -165,9 +162,9 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
       const expected = rev.current + 1;
       removeStep(i);
       toast.show({
-        message: `Step ${i + 1} deleted`,
+        message: (tr) => tr.editor.stepDeleted(i + 1),
         icon: 'trash',
-        action: { label: 'Undo', onPress: () => rev.current === expected && undo() },
+        action: { label: (tr) => tr.common.undo, onPress: () => rev.current === expected && undo() },
       });
     },
     [removeStep, undo, toast],
@@ -190,18 +187,18 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
 
   const regenerate = async () => {
     const ok = await confirm({
-      title: 'Mirror the leader again?',
-      message: 'The follower’s steps are replaced by a mirror of the leader’s. You can undo this.',
-      confirmLabel: 'Mirror again',
+      title: (tr) => tr.follower.regenerateTitle,
+      message: (tr) => tr.follower.regenerateMessage,
+      confirmLabel: (tr) => tr.follower.mirrorAgain,
       icon: 'mirror',
     });
     if (ok) d.createFollower('mirror');
   };
   const removeFollower = async () => {
     const ok = await confirm({
-      title: 'Remove the follower part?',
-      message: 'All follower steps are removed from this dance. You can undo this.',
-      confirmLabel: 'Remove',
+      title: (tr) => tr.follower.removeTitle,
+      message: (tr) => tr.follower.removeMessage,
+      confirmLabel: (tr) => tr.follower.remove,
       destructive: true,
       icon: 'trash',
     });
@@ -212,10 +209,10 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
   // Canvas + step strip fit on one phone screen together (with the details collapsed).
   const canvasH = Math.round(Math.min(380, Math.max(200, winH - 470)));
   const tone = styleColor(draft.style);
-  const hint = coachHint({ sel, step, stepCount: pattern?.steps.length ?? 0, startFoot, dragging: d.dragging, blocked });
+  const hint = coachHint({ sel, step, stepCount: pattern?.steps.length ?? 0, startFoot, dragging: d.dragging, blocked }, t);
   const roleOptions = (['leader', 'follower'] as Role[]).map((r) => ({
     value: r,
-    label: r === 'leader' ? 'Leader' : 'Follower',
+    label: t.roles[r],
     icon: r === 'leader' ? ('flat-shoe' as const) : ('heel' as const),
     tone: ROLE_COLOR[r],
   }));
@@ -227,7 +224,7 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
       testID="editor"
       header={
         <EditorTopBar
-          title={isNew ? 'New dance' : 'Edit dance'}
+          title={isNew ? t.editor.newTitle : t.editor.editTitle}
           onClose={close}
           onUndo={d.undo}
           canUndo={d.canUndo}
@@ -262,7 +259,7 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
             </Entrance>
 
             <Entrance index={1}>
-              <Segmented label="Part" options={roleOptions} value={role} onChange={d.setRole} testID="role-switch" />
+              <Segmented label={t.roles.part} options={roleOptions} value={role} onChange={d.setRole} testID="role-switch" />
             </Entrance>
 
             {!pattern ? (

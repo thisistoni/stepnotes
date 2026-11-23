@@ -24,6 +24,7 @@ A mobile app (iOS and Android, built with Expo / React Native) for **learning an
 - **Editor**: drag the feet on a grid (or tap to place), rotate in 15° steps, and set each step's count, length (½ / 1 / 2 beats), foot, action (step, tap, hold) and a note. Generate the follower part as a mirror of the leader, then adjust it. Undo for every change. "Make my own version" of a starter dance opens the editor on a copy that is only saved when you press Save.
 - **Import**: paste a dance someone shared (extra chat text around it is fine).
 - Everything is stored on the device. There are no accounts and no server.
+- **Languages**: German (the default for now) and English. Switch with the globe button in the library header, or with DE | EN on the first intro screen. The choice is saved with the other settings.
 
 ## Run it
 
@@ -66,9 +67,16 @@ src/
     useDanceDraft.ts      editor state with undo
     store.tsx, prefs.tsx  saved dances and settings (AsyncStorage)
     validate.ts           checks imported and stored dances
+    i18n/                 German and English texts, useT(), plurals
     builtins.ts           starter dances
     theme.ts              colours, type, spacing
 ```
+
+## Languages
+
+All user-facing text lives in `src/lib/i18n/`: `en.ts` is the source and defines the `Strings` type, `de.ts` must match it exactly (a missing or extra key does not compile). Components call `useT()`; code outside React (step descriptions, validation errors) takes the dictionary as an argument. Sentences with values are functions (`t.count.stepOf(3, 8)`), plurals go through `plural.ts`, and step descriptions are written per language from the step's structure (`analyzeStep` in `pattern.ts`). The starter dances get their names, styles, descriptions and notes from the dictionaries too.
+
+To add a language: add its code to `LANGUAGES` in `languages.ts`, write `xx.ts` typed as `Strings` (start from `en.ts`), add a plural rule in `plural.ts` and register the dictionary in `STRINGS` in `index.tsx`. If its style names differ (like "Latein"), add them to `STYLE_ALIASES` in `theme.ts` so they keep their colours.
 
 ## Data model
 

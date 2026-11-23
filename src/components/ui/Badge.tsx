@@ -1,5 +1,6 @@
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { useT } from '@/lib/i18n';
 import { colors, radius, ROLE_COLOR, styleColor, typography } from '@/lib/theme';
 import type { Foot, Role } from '@/lib/types';
 
@@ -49,9 +50,10 @@ export function FootBadge({
   sx?: StyleProp<ViewStyle>;
 }) {
   const c = ROLE_COLOR[role];
+  const t = useT();
   return (
     <View
-      accessibilityLabel={foot === 'L' ? 'Left foot' : foot === 'R' ? 'Right foot' : 'Hold'}
+      accessibilityLabel={foot === 'L' ? t.feet.leftFoot : foot === 'R' ? t.feet.rightFoot : t.feet.hold}
       style={[
         s.foot,
         { width: size, height: size, borderRadius: size * 0.35, backgroundColor: weight ? c.base : c.light },

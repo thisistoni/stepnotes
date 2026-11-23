@@ -1,10 +1,12 @@
 import { StyleSheet, View } from 'react-native';
 
 import { EmptyState, FootSticker } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { ROLE_COLOR, STYLE_COLORS } from '@/lib/theme';
 
 /** "Write down your first dance" card shown while My dances is empty. */
 export function MyDancesEmpty({ onCreate }: { onCreate: () => void }) {
+  const t = useT();
   return (
     <EmptyState
       art={
@@ -14,9 +16,9 @@ export function MyDancesEmpty({ onCreate }: { onCreate: () => void }) {
           <FootSticker tone={STYLE_COLORS.salsa} size={40} rotate={-4} style={s.upMore} />
         </View>
       }
-      title="Write down your first dance"
-      body="Place the footprints step by step, then play them back at your own pace."
-      action={{ label: 'Create a dance', icon: 'plus', onPress: onCreate, testID: 'empty-create' }}
+      title={t.library.emptyTitle}
+      body={t.library.emptyBody}
+      action={{ label: t.library.emptyAction, icon: 'plus', onPress: onCreate, testID: 'empty-create' }}
     />
   );
 }

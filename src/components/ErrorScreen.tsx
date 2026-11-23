@@ -1,6 +1,7 @@
 import { router, type ErrorBoundaryProps } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
+import { useOptionalT } from '@/lib/i18n';
 import { colors, space } from '@/lib/theme';
 
 import { Icon } from './Icon';
@@ -12,6 +13,8 @@ import { Button, Text } from './ui';
  * Must not depend on app providers (it can render outside them) — only stateless kit parts.
  */
 export function ErrorScreen({ error, retry }: ErrorBoundaryProps) {
+  // may render outside the providers: then the last known language
+  const t = useOptionalT();
   return (
     <View style={s.wrap}>
       <View style={s.column}>
@@ -19,10 +22,10 @@ export function ErrorScreen({ error, retry }: ErrorBoundaryProps) {
           <Icon name="alert" size={30} color={colors.danger} />
         </View>
         <Text variant="title" align="center">
-          Something went wrong
+          {t.errorScreen.title}
         </Text>
         <Text variant="body" color="ink2" align="center">
-          This screen could not be shown. Your dances are safe.
+          {t.errorScreen.body}
         </Text>
         {__DEV__ && (
           <Text variant="caption" color="dangerInk" align="center">
@@ -30,9 +33,9 @@ export function ErrorScreen({ error, retry }: ErrorBoundaryProps) {
           </Text>
         )}
         <View style={s.actions}>
-          <Button label="Try again" onPress={() => void retry()} />
+          <Button label={t.errorScreen.retry} onPress={() => void retry()} />
           <Button
-            label="Go to library"
+            label={t.errorScreen.home}
             variant="secondary"
             onPress={() => {
               void retry();

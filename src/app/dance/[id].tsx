@@ -36,7 +36,7 @@ import {
   type MenuItem,
 } from '@/components/ui';
 import { barRanges, computeStates, describeStep, describeStepShort, mirrorPattern, stepStartBeats, totalBeats } from '@/lib/pattern';
-import { PersistError } from '@/lib/persist';
+import { errorText, useT } from '@/lib/i18n';
 import { usePrefs } from '@/lib/prefs';
 import { useDances } from '@/lib/store';
 import { DEFAULT_FOOT_STYLE, ROLE_COLOR, space, styleColor, TONE } from '@/lib/theme';
@@ -72,6 +72,7 @@ const CHART_MT = space.l;
 function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance | null) => void }) {
   const { duplicate, remove, restore, isBuiltIn } = useDances();
   const { prefs, set } = usePrefs();
+  const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
   const reduced = useReducedMotion();
@@ -114,7 +115,7 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
   const steps = primary.steps;
   const canPlay = steps.length > 0;
 
-  const onStep = usePlayerCues({ steps, speak: prefs.speakCounts, vibrate: prefs.haptics, bpm });
+  const onStep = usePlayerCues({ steps, speak: prefs.speakCounts, vibrate: prefs.haptics, bpm, t });
   const pb = usePlayback({ totalBeats: total, bpm, stepStartBeats: starts, loop: prefs.loop, onStep });
   usePauseSilence(pb.playing);
   const index = Math.min(pb.index, steps.length - 1);
@@ -139,12 +140,12 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
     const p = patterns[r]!;
     const st = index >= 0 ? (p.steps[index] ?? null) : null;
     const text = st
-      ? (shownRoles.length > 1 ? describeStepShort : describeStep)(st, states[r]![index])
+      ? (shownRoles.length > 1 ? describeStepShort : describeStep)(st, states[r]![index], t)
       : p.steps.length === 0
-        ? 'Nothing to play yet'
+        ? t.player.nothingToPlay
         : shownRoles.length > 1
-          ? 'Start position'
-          : 'Start position. Press play or step through.';
+          ? t.player.startPosition
+          : t.player.startPositionHint;
     return { role: r, step: st, text };
   });
 
@@ -197,21 +198,21 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
   }, [pause, dance.id]);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const name = dance.name.trim() || 'Untitled dance';
+  const name = dance.name.trim() || t.common.untitled;
   const onDuplicate = async () => {
     try {
       const copy = await duplicate(dance);
-      toast.show({ message: 'Copy saved to My dances', icon: 'copy', action: { label: 'Open', onPress: () => router.push(`/dance/${copy.id}`) } });
+      toast.show({ message: (tr) => tr.player.copied, icon: 'copy', action: { label: (tr) => tr.common.open, onPress: () => router.push(`/dance/${copy.id}`) } });
     } catch (e) {
-      toast.show({ message: e instanceof PersistError ? e.message : 'Could not copy this dance. Please try again.', icon: 'alert' });
+      toast.show({ message: (tr) => errorText(e, tr, tr.player.copyFailed), icon: 'alert' });
     }
   };
   const onDelete = async () => {
     pause();
     const ok = await confirm({
-      title: `Delete “${name}”?`,
-      message: 'It will be removed from My dances. You can undo this right after.',
-      confirmLabel: 'Delete',
+      title: (tr) => tr.player.deleteTitle(name),
+      message: (tr) => tr.player.deleteMessage,
+      confirmLabel: (tr) => tr.player.delete,
       destructive: true,
       icon: 'trash',
     });
@@ -221,20 +222,27 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
       const removed = await remove(dance.id);
       goBackOrHome();
       if (removed) {
-        toast.show({ message: `Deleted “${name}”`, icon: 'trash', action: { label: 'Undo', onPress: () => restore(removed).catch(() => toast.show({ message: 'Could not bring it back. Please try again.', icon: 'alert' })) } });
+        toast.show({
+          message: (tr) => tr.player.deleted(name),
+          icon: 'trash',
+          action: {
+            label: (tr) => tr.common.undo,
+            onPress: () => restore(removed).catch(() => toast.show({ message: (tr) => tr.player.restoreFailed, icon: 'alert' })),
+          },
+        });
       }
     } catch (e) {
       onLeaving(null);
-      toast.show({ message: e instanceof PersistError ? e.message : 'Could not delete this dance. Please try again.', icon: 'alert' });
+      toast.show({ message: (tr) => errorText(e, tr, tr.player.deleteFailed), icon: 'alert' });
     }
   };
   const menuItems: MenuItem[] = [
     builtIn
-      ? { key: 'own', label: 'Make my own version', hint: 'Opens the editor on a copy', icon: 'pencil', onPress: makeOwn }
-      : { key: 'edit', label: 'Edit steps', icon: 'pencil', onPress: edit },
-    { key: 'dup', label: 'Duplicate', hint: 'Save a copy to My dances', icon: 'copy', onPress: onDuplicate },
-    { key: 'share', label: 'Share', hint: 'Send it as text', icon: 'share', onPress: () => void shareDance(dance, toast.show) },
-    ...(builtIn ? [] : [{ key: 'del', label: 'Delete', icon: 'trash' as const, destructive: true, onPress: onDelete }]),
+      ? { key: 'own', label: t.player.makeOwn, hint: t.player.makeOwnHint, icon: 'pencil', onPress: makeOwn }
+      : { key: 'edit', label: t.player.editSteps, icon: 'pencil', onPress: edit },
+    { key: 'dup', label: t.player.duplicate, hint: t.player.duplicateHint, icon: 'copy', onPress: onDuplicate },
+    { key: 'share', label: t.player.share, hint: t.player.shareHint, icon: 'share', onPress: () => void shareDance(dance, t, toast.show) },
+    ...(builtIn ? [] : [{ key: 'del', label: t.player.delete, icon: 'trash' as const, destructive: true, onPress: onDelete }]),
   ];
 
   // --- layout -------------------------------------------------------------------------------
@@ -247,7 +255,7 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
   const chartH = chartControlsHeight(bars.length > 1);
   const stageChartH = stageH + practiceH - (CHART_MT + chartH);
 
-  const meta = [narrow ? '' : `${dance.beatsPerBar}/4`, `${dance.bpm} bpm`].filter(Boolean).join(' · ');
+  const meta = [narrow ? '' : t.units.meter(dance.beatsPerBar), t.units.bpm(dance.bpm)].filter(Boolean).join(' · ');
   const tone = styleColor(dance.style);
   const role = ROLE_COLOR[primaryRole];
   const listPatternRole: Role = view === 'both' ? listRole : primaryRole;
@@ -266,12 +274,12 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
               {!narrow && (
                 <IconButton
                   icon="pencil"
-                  label={builtIn ? 'Make my own version' : 'Edit dance'}
+                  label={builtIn ? t.player.makeOwn : t.player.edit}
                   onPress={builtIn ? makeOwn : edit}
                   testID="edit-button"
                 />
               )}
-              <IconButton icon="more" label="More actions" onPress={() => setMenuOpen(true)} testID="more-button" />
+              <IconButton icon="more" label={t.player.more} onPress={() => setMenuOpen(true)} testID="more-button" />
             </>
           }
         />
@@ -281,12 +289,12 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
         <Segmented
           value={view}
           onChange={setRoleView}
-          label="Part"
+          label={t.roles.part}
           testID="role-switch"
           options={[
-            { value: 'leader', label: 'Leader', icon: narrow ? undefined : 'flat-shoe', tone: TONE.primary },
-            { value: 'follower', label: 'Follower', icon: narrow ? undefined : 'heel', tone: TONE.follower },
-            { value: 'both', label: 'Both', tone: TONE.ink },
+            { value: 'leader', label: t.roles.leader, icon: narrow ? undefined : 'flat-shoe', tone: TONE.primary },
+            { value: 'follower', label: t.roles.follower, icon: narrow ? undefined : 'heel', tone: TONE.follower },
+            { value: 'both', label: t.roles.both, tone: TONE.ink },
           ]}
           style={s.roleSeg}
         />
@@ -350,7 +358,7 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
           index={listPatternRole === primaryRole || stageRoles.every((r) => r.synced) ? index : -1}
           onJump={onJump}
           roleSwitch={view === 'both' ? { value: listRole, onChange: setListRole } : undefined}
-          action={builtIn ? { label: 'Make my own', onPress: makeOwn } : { label: 'Edit steps', onPress: edit }}
+          action={builtIn ? { label: t.player.makeOwnShort, onPress: makeOwn } : { label: t.player.editSteps, onPress: edit }}
         />
         <AboutCard dance={dance} />
       </View>

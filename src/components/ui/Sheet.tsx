@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { useT } from '@/lib/i18n';
 import { colors, layout, motion, radius, space, withAlpha } from '@/lib/theme';
 
 import { useReducedMotion } from './feedback';
@@ -28,6 +29,7 @@ export interface SheetProps {
 export function Sheet({ visible, onClose, onClosed, title, children, testID }: SheetProps) {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
+  const tr = useT();
   const [mounted, setMounted] = useState(visible);
   /** false once the exit animation ended: the native modal is being dismissed */
   const [shown, setShown] = useState(visible);
@@ -122,7 +124,7 @@ export function Sheet({ visible, onClose, onClosed, title, children, testID }: S
             style={StyleSheet.absoluteFill}
             onPress={onClose}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={tr.common.close}
             testID="sheet-backdrop"
           />
         </Animated.View>
@@ -133,7 +135,7 @@ export function Sheet({ visible, onClose, onClosed, title, children, testID }: S
           style={[s.panel, { paddingBottom: Math.max(insets.bottom, space.l) + space.s }, panel]}
         >
           <GestureDetector gesture={pan}>
-            <View style={s.grab} accessibilityHint="Drag down to close">
+            <View style={s.grab} accessibilityHint={tr.common.dragToClose}>
               <View style={s.handle} />
               {!!title && (
                 <Text variant="heading" style={s.title} accessibilityRole="header">

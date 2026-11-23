@@ -13,6 +13,7 @@
  */
 import { useCallback, useMemo, useReducer } from 'react';
 
+import type { Strings } from './i18n/en';
 import { computeStates, nextCount, otherFoot, toPartner, uid } from './pattern';
 import type { Dance, Foot, FootPos, Pattern, Role, Step, StepKind } from './types';
 
@@ -316,9 +317,10 @@ export function useDanceDraft(initial: Dance) {
 
 /**
  * A new, unsaved copy of a dance ("Make my own version"): deep copy, fresh ids,
- * " (my version)" name, not built in.
+ * " (my version)" name in the app's language, not built in. A starter dance is copied with the
+ * texts of the language it is shown in.
  */
-export function copyForEditing(d: Dance): Dance {
+export function copyForEditing(d: Dance, t: Strings): Dance {
   const clone = JSON.parse(JSON.stringify(d)) as Dance;
   const freshIds = (p: Pattern): Pattern => ({ ...p, steps: p.steps.map((s) => ({ ...s, id: uid('step') })) });
   const now = Date.now();
@@ -326,7 +328,7 @@ export function copyForEditing(d: Dance): Dance {
   return {
     ...rest,
     id: uid('dance'),
-    name: `${d.name.trim() || 'Untitled dance'} (my version)`,
+    name: t.common.myVersion(d.name.trim() || t.common.untitled),
     roles: {
       leader: freshIds(clone.roles.leader),
       ...(clone.roles.follower ? { follower: freshIds(clone.roles.follower) } : {}),

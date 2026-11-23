@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { Chip } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import type { Prefs } from '@/lib/prefs';
 
 interface Props {
@@ -16,29 +17,30 @@ interface Props {
 
 /** Practice toggles, sized to their labels and wrapping, so no label is ever truncated. */
 export const PlayerToggles = memo(function PlayerToggles({ loop, speak, mirror, letters, vibrate, setPref, setMirror }: Props) {
+  const t = useT();
   return (
     <View style={s.row} testID="player-toggles">
-      <Chip variant="toggle" icon="loop" label="Loop" selected={loop} onPress={() => setPref({ loop: !loop })} testID="toggle-loop" />
+      <Chip variant="toggle" icon="loop" label={t.toggles.loop} selected={loop} onPress={() => setPref({ loop: !loop })} testID="toggle-loop" />
       <Chip
         variant="toggle"
         icon={speak ? 'volume' : 'volume-off'}
-        label="Say counts"
+        label={t.toggles.speak}
         selected={speak}
         onPress={() => setPref({ speakCounts: !speak })}
         testID="toggle-speak"
       />
-      <Chip variant="toggle" icon="mirror" label="Mirror" selected={mirror} onPress={() => setMirror(!mirror)} testID="toggle-mirror" />
+      <Chip variant="toggle" icon="mirror" label={t.toggles.mirror} selected={mirror} onPress={() => setMirror(!mirror)} testID="toggle-mirror" />
       <Chip
         variant="toggle"
         icon="letters"
-        label="L / R letters"
-        accessibilityLabel="Show L and R letters on the feet"
+        label={t.toggles.letters}
+        accessibilityLabel={t.toggles.lettersA11y}
         selected={letters}
         onPress={() => setPref({ showLetters: !letters })}
         testID="toggle-letters"
       />
       {Platform.OS !== 'web' && (
-        <Chip variant="toggle" icon="vibrate" label="Vibrate" selected={vibrate} onPress={() => setPref({ haptics: !vibrate })} testID="toggle-vibrate" />
+        <Chip variant="toggle" icon="vibrate" label={t.toggles.vibrate} selected={vibrate} onPress={() => setPref({ haptics: !vibrate })} testID="toggle-vibrate" />
       )}
     </View>
   );

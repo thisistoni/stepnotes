@@ -3,6 +3,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedProps, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
+import { useT } from '@/lib/i18n';
 import { colors, motion, TONE, withAlpha, type ColorSet } from '@/lib/theme';
 
 import { useReducedMotion } from './feedback';
@@ -20,11 +21,12 @@ export interface SegmentedProgressProps {
 
 /** Onboarding-style progress pills; newly filled pills fill with a springy overshoot. */
 export function SegmentedProgress({ total, value, tone = TONE.primary, style }: SegmentedProgressProps) {
+  const t = useT();
   return (
     <View
       style={[s.pills, style]}
       accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: total, now: value, text: `Step ${value} of ${total}` }}
+      accessibilityValue={{ min: 0, max: total, now: value, text: t.common.progress(value, total) }}
     >
       {Array.from({ length: total }, (_, i) => (
         <Pill key={i} on={i < value} color={tone.base} />

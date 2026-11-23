@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { Button, Icon, IconButton, Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { colors, space } from '@/lib/theme';
 
 export interface EditorTopBarProps {
@@ -14,9 +15,10 @@ export interface EditorTopBarProps {
 
 /** Close ✕ · title · Undo · Save. Same insets as the kit Header (never flush to the edge). */
 export function EditorTopBar({ title, onClose, onUndo, canUndo, onSave, saving }: EditorTopBarProps) {
+  const t = useT();
   return (
     <View style={s.bar}>
-      <IconButton icon="close" label="Close editor" onPress={onClose} testID="header-back" />
+      <IconButton icon="close" label={t.editor.close} onPress={onClose} testID="header-back" />
       <View style={s.center}>
         <Text variant="heading" numberOfLines={1} accessibilityRole="header">
           {title}
@@ -25,7 +27,7 @@ export function EditorTopBar({ title, onClose, onUndo, canUndo, onSave, saving }
       {onUndo && (
         <IconButton
           icon="undo"
-          label="Undo"
+          label={t.editor.undo}
           onPress={onUndo}
           disabled={!canUndo}
           testID="undo"
@@ -33,7 +35,7 @@ export function EditorTopBar({ title, onClose, onUndo, canUndo, onSave, saving }
           <Icon name="undo" size={22} color={canUndo ? colors.ink : colors.ink3} strokeWidth={2.4} />
         </IconButton>
       )}
-      {onSave && <Button label="Save" size="sm" inline loading={saving} onPress={onSave} style={s.save} testID="save" />}
+      {onSave && <Button label={t.editor.save} size="sm" inline loading={saving} onPress={onSave} style={s.save} testID="save" />}
     </View>
   );
 }

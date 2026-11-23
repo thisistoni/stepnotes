@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Icon, LipSurface, Slider, Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { colors, lip, radius, type ColorSet } from '@/lib/theme';
 
 interface Props {
@@ -23,6 +24,7 @@ export const TempoControl = memo(function TempoControl({ speed, bpm, tone, onCha
   const pct = Math.min(MAX, Math.max(MIN, Math.round((speed * 100) / 5) * 5));
   const effective = Math.round(bpm * (pct / 100));
   const narrow = useWindowDimensions().width < 360;
+  const t = useT();
   const [pressed, setPressed] = useState(false);
   return (
     <LipSurface radius={radius.md} lipDepth={lip.md} faceStyle={s.face}>
@@ -30,7 +32,7 @@ export const TempoControl = memo(function TempoControl({ speed, bpm, tone, onCha
         <Icon name="tempo" size={18} color={colors.ink2} strokeWidth={2.4} />
         {!narrow && (
           <Text variant="smallStrong" color="ink2">
-            Tempo
+            {t.tempo.label}
           </Text>
         )}
       </View>
@@ -39,8 +41,8 @@ export const TempoControl = memo(function TempoControl({ speed, bpm, tone, onCha
         min={MIN}
         max={MAX}
         step={5}
-        label="Tempo"
-        formatValue={(v) => `${v} percent, ${Math.round(bpm * (v / 100))} beats per minute`}
+        label={t.tempo.label}
+        formatValue={(v) => t.tempo.value(v, Math.round(bpm * (v / 100)))}
         onChange={(v) => onChange(v / 100)}
         onChangeEnd={(v) => onCommit(v / 100)}
         tone={tone}
@@ -58,17 +60,16 @@ export const TempoControl = memo(function TempoControl({ speed, bpm, tone, onCha
         onPressOut={() => setPressed(false)}
         hitSlop={{ top: 10, bottom: 10, left: 6, right: 8 }}
         accessibilityRole="button"
-        accessibilityLabel={`Tempo ${pct} percent, ${effective} beats per minute`}
-        accessibilityHint={pct !== 100 ? 'Resets the tempo to 100 percent' : undefined}
+        accessibilityLabel={t.tempo.current(pct, effective)}
+        accessibilityHint={pct !== 100 ? t.tempo.resetHint : undefined}
         style={[s.value, pressed && s.pressed]}
         testID="tempo-label"
       >
         <Text variant="numeralSm" style={s.pct}>
-          {pct}%
+          {t.units.percent(pct)}
         </Text>
         <Text variant="small" color="ink3" style={s.bpm}>
-          {' '}
-          · {effective} bpm
+          {` · ${t.units.bpm(effective)}`}
         </Text>
       </Pressable>
     </LipSurface>

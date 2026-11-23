@@ -4,6 +4,7 @@ import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
 import { SVG_FONT } from '@/components/FootShape';
 import { FootSticker, Segmented, Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import type { BarRange } from '@/lib/pattern';
 import { colors, ROLE_COLOR, TONE, type ColorSet } from '@/lib/theme';
 import type { Role } from '@/lib/types';
@@ -51,9 +52,10 @@ export function chartControlsHeight(withBars: boolean) {
 export const ChartControls = memo(function ChartControls({ bars, value, onChange, role }: Props) {
   const c = ROLE_COLOR[role];
   const narrow = useWindowDimensions().width < 360;
+  const t = useT();
   const options = [
-    ...bars.map((b, i) => ({ value: String(b.bar), label: bars.length > 4 ? `${i + 1}` : `Bar ${i + 1}`, accessibilityLabel: `Bar ${i + 1}` })),
-    { value: 'all', label: 'All', accessibilityLabel: 'All steps' },
+    ...bars.map((b, i) => ({ value: String(b.bar), label: bars.length > 4 ? `${i + 1}` : t.chart.bar(i + 1), accessibilityLabel: t.chart.bar(i + 1) })),
+    { value: 'all', label: t.chart.all, accessibilityLabel: t.chart.allA11y },
   ];
   return (
     <View style={s.wrap} testID="chart-controls">
@@ -63,27 +65,27 @@ export const ChartControls = memo(function ChartControls({ bars, value, onChange
           value={String(value)}
           onChange={(v) => onChange(v === 'all' ? 'all' : Number(v))}
           color={TONE.ink}
-          label="Chart of"
+          label={t.chart.of}
           testID="bar-picker"
         />
       )}
-      <View style={s.legend} accessible accessibilityLabel="Solid feet: where you start. Numbers: the counts. Dashed arrow: a tap without weight.">
+      <View style={s.legend} accessible accessibilityLabel={t.chart.legendA11y}>
         <View style={s.item}>
           <FootSticker size={22} tone={c} />
           <Text variant="caption" color="ink2">
-            Start
+            {t.chart.start}
           </Text>
         </View>
         <View style={s.item}>
           <NumberBadge c={c} />
           <Text variant="caption" color="ink2">
-            Count
+            {t.chart.count}
           </Text>
         </View>
         <View style={s.item}>
           <DashedArrow color={c.lip} />
           <Text variant="caption" color="ink2">
-            {narrow ? 'Tap' : 'Tap (no weight)'}
+            {narrow ? t.chart.tap : t.chart.tapLong}
           </Text>
         </View>
       </View>

@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Entrance, FootSticker, Text, useReducedMotion } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { motion, ROLE_COLOR, space, STYLE_COLORS, type ColorSet } from '@/lib/theme';
 import type { Foot } from '@/lib/types';
 
@@ -76,6 +77,7 @@ function TrailFoot({ index, animate }: { index: number; animate: boolean }) {
 
 /** Step 1: footprints walk in, app name, the promise. */
 export function WelcomeStep({ animate }: { animate: boolean }) {
+  const t = useT();
   return (
     <View style={s.root} testID="intro-welcome">
       <View style={s.trail} accessible={false} importantForAccessibility="no-hide-descendants">
@@ -90,7 +92,7 @@ export function WelcomeStep({ animate }: { animate: boolean }) {
       </Entrance>
       <Entrance index={4}>
         <Text variant="body" color="ink2" align="center" style={s.promise}>
-          Learn any dance step, one footprint at a time.
+          {t.intro.promise}
         </Text>
       </Entrance>
     </View>

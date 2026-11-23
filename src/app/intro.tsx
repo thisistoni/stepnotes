@@ -12,6 +12,7 @@ import { RoleStep, type RoleChoice } from '@/components/intro/RoleStep';
 import { StepTransition } from '@/components/intro/StepTransition';
 import { WelcomeStep } from '@/components/intro/WelcomeStep';
 import { Button, goBackOrHome, Header, Screen } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { usePrefs } from '@/lib/prefs';
 import { space } from '@/lib/theme';
 import type { Role } from '@/lib/types';
@@ -26,10 +27,11 @@ export default function Intro() {
 /** The lesson on its own (from the Library's "How to read the footprints" card). */
 function LessonOnly() {
   const { prefs } = usePrefs();
+  const t = useT();
   return (
     <Screen
       header={<Header leading="close" onBack={goBackOrHome} />}
-      footer={<Button label="Got it" onPress={goBackOrHome} testID="intro-primary" />}
+      footer={<Button label={t.intro.gotIt} onPress={goBackOrHome} testID="intro-primary" />}
       contentStyle={[s.grow, s.tight]}
       testID="intro-screen"
     >
@@ -40,6 +42,7 @@ function LessonOnly() {
 
 function IntroFlow() {
   const { prefs, set } = usePrefs();
+  const t = useT();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<1 | -1 | 0>(0);
   const [choice, setChoice] = useState<RoleChoice | null>(null);
@@ -93,11 +96,11 @@ function IntroFlow() {
 
   const footer =
     step === 0 ? (
-      <Button label="Get started" onPress={() => go(1)} testID="intro-primary" />
+      <Button label={t.intro.getStarted} onPress={() => go(1)} testID="intro-primary" />
     ) : step === 1 ? (
-      <Button label="Continue" disabled={!choice} onPress={() => go(2)} testID="intro-primary" />
+      <Button label={t.intro.continue} disabled={!choice} onPress={() => go(2)} testID="intro-primary" />
     ) : (
-      <Button label="Start dancing" onPress={finish} testID="intro-primary" />
+      <Button label={t.intro.startDancing} onPress={finish} testID="intro-primary" />
     );
 
   return (

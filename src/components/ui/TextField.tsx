@@ -1,6 +1,7 @@
 import { useState, type ComponentRef, type Ref } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 
+import { useT } from '@/lib/i18n';
 import { colors, fonts, lip, radius } from '@/lib/theme';
 
 import { Icon, type IconName } from '../Icon';
@@ -47,6 +48,7 @@ export function TextField({
   accessibilityLabel,
   ...rest
 }: TextFieldProps) {
+  const t = useT();
   const [focused, setFocused] = useState(false);
   const showClear = clearable && !!value && editable;
   const border = error ? colors.danger : focused ? colors.primary : colors.cardBorder;
@@ -99,7 +101,7 @@ export function TextField({
         {showClear && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Clear text"
+            accessibilityLabel={t.common.clearText}
             hitSlop={10}
             onPress={() => onChangeText?.('')}
             style={s.clear}
@@ -125,15 +127,13 @@ export function TextField({
 }
 
 /** Search box: magnifier, clear button, "search" return key. */
-export function SearchField({
-  placeholder = 'Search',
-  ...rest
-}: Omit<TextFieldProps, 'icon' | 'clearable' | 'multiline'>) {
+export function SearchField({ placeholder, ...rest }: Omit<TextFieldProps, 'icon' | 'clearable' | 'multiline'>) {
+  const t = useT();
   return (
     <TextField
       icon="search"
       clearable
-      placeholder={placeholder}
+      placeholder={placeholder ?? t.common.search}
       returnKeyType="search"
       autoCorrect={false}
       autoCapitalize="none"

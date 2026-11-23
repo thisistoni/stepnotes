@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { Icon, IconButton, ProgressRing, Text, useReducedMotion } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { colors, motion, type ColorSet } from '@/lib/theme';
 
 interface Props {
@@ -53,14 +54,15 @@ function PlayPauseIcon({ playing, color }: { playing: boolean; color: string }) 
 /** previous · big round play/pause inside the progress ring · next */
 export const Transport = memo(function Transport({ playing, progress, tone, canPlay, canPrev, onToggle, onPrev, onNext, compact = false }: Props) {
   const z = compact ? SIZE.compact : SIZE.regular;
+  const t = useT();
   return (
     <View style={st.wrap}>
       <View style={[st.row, { height: z.h }]}>
-        <IconButton icon="skip-prev" label="Previous step" size={z.side} iconSize={22} onPress={onPrev} disabled={!canPlay || !canPrev} testID="prev" />
+        <IconButton icon="skip-prev" label={t.transport.previous} size={z.side} iconSize={22} onPress={onPrev} disabled={!canPlay || !canPrev} testID="prev" />
         <ProgressRing progress={progress} size={z.ring} strokeWidth={5} tone={tone} trackColor={tone.tint}>
           <IconButton
             icon="play"
-            label={playing ? 'Pause' : 'Play'}
+            label={playing ? t.transport.pause : t.transport.play}
             variant="primary"
             shape="round"
             size={z.core}
@@ -72,11 +74,11 @@ export const Transport = memo(function Transport({ playing, progress, tone, canP
             <PlayPauseIcon playing={playing} color={canPlay ? tone.on : colors.ink3} />
           </IconButton>
         </ProgressRing>
-        <IconButton icon="skip-next" label="Next step" size={z.side} iconSize={22} onPress={onNext} disabled={!canPlay} testID="next" />
+        <IconButton icon="skip-next" label={t.transport.next} size={z.side} iconSize={22} onPress={onNext} disabled={!canPlay} testID="next" />
       </View>
       {!canPlay && (
         <Text variant="small" color="ink2" align="center" style={st.hint} testID="play-disabled-hint">
-          This dance has no steps yet. Add some in the editor to play it.
+          {t.transport.noSteps}
         </Text>
       )}
     </View>

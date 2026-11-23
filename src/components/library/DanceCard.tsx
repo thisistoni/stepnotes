@@ -2,25 +2,25 @@ import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DiagramThumb, PressableLip, Skeleton, StyleBadge, Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { DEFAULT_FOOT_STYLE, lip, radius, space, styleColor } from '@/lib/theme';
 import type { Dance } from '@/lib/types';
-
-import { stepCountLabel } from './useLibrary';
 
 const TILE_H = 112;
 
 /** Library card: tinted thumbnail tile with the style badge, title (2 lines max) and meta. */
 export const DanceCard = memo(function DanceCard({ dance, onOpen }: { dance: Dance; onOpen: (id: string) => void }) {
+  const t = useT();
   const tone = styleColor(dance.style);
-  const name = dance.name.trim() || 'Untitled dance';
-  const meta = stepCountLabel(dance);
+  const name = dance.name.trim() || t.common.untitled;
+  const meta = t.library.cardMeta(dance.roles.leader.steps.length, dance.bpm);
   return (
     <PressableLip
       onPress={() => onOpen(dance.id)}
       radius={radius.card}
       lipDepth={lip.lg}
       accessibilityLabel={[name, dance.style.trim(), meta].filter(Boolean).join(', ')}
-      accessibilityHint="Opens the dance"
+      accessibilityHint={t.library.openHint}
       testID={`dance-card-${dance.id}`}
       style={s.card}
       faceStyle={s.face}
@@ -35,7 +35,8 @@ export const DanceCard = memo(function DanceCard({ dance, onOpen }: { dance: Dan
         <StyleBadge style={dance.style} small sx={s.badge} />
       </View>
       <View style={s.text}>
-        <Text variant="label" numberOfLines={2}>
+        {/* three lines: German starter names ("Bachata Grundschritt seitwärts") must not be cut */}
+        <Text variant="label" numberOfLines={3}>
           {name}
         </Text>
         <Text variant="caption" color="ink2" numberOfLines={2} style={s.meta}>

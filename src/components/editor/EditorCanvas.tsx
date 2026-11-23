@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { StepDiagram, type Bounds } from '@/components/StepDiagram';
 import { Icon, IconButton, Stage, Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { computeStates, type Frame } from '@/lib/pattern';
 import { colors, lip, radius, roleTheme, space, withAlpha, type ColorSet } from '@/lib/theme';
 import type { Foot, FootPos, FootStyle, Pattern, Role } from '@/lib/types';
@@ -30,11 +31,12 @@ export interface EditorCanvasProps {
 
 /** −15° / +15° buttons for the foot being edited (sits beside the canvas). */
 export function RotateTray({ onRotate, disabled }: { onRotate: (delta: number) => void; disabled?: boolean }) {
+  const t = useT();
   return (
     <View style={s.tray}>
       <IconButton
         icon="rotate-left"
-        label="Rotate foot 15 degrees left"
+        label={t.editor.rotateLeft}
         variant="ghost"
         size={44}
         iconSize={21}
@@ -45,7 +47,7 @@ export function RotateTray({ onRotate, disabled }: { onRotate: (delta: number) =
       <View style={s.trayDivider} />
       <IconButton
         icon="rotate-right"
-        label="Rotate foot 15 degrees right"
+        label={t.editor.rotateRight}
         variant="ghost"
         size={44}
         iconSize={21}
@@ -80,6 +82,7 @@ interface Gesture {
  */
 export const EditorCanvas = memo(function EditorCanvas(props: EditorCanvasProps) {
   const { tone, height } = props;
+  const t = useT();
   return (
     <Stage
       tone={tone}
@@ -91,7 +94,7 @@ export const EditorCanvas = memo(function EditorCanvas(props: EditorCanvasProps)
         <View style={s.tag} pointerEvents="none">
           <Icon name="arrow-up" size={13} color={colors.ink2} strokeWidth={2.8} />
           <Text variant="overline" color="ink2" style={s.tagText}>
-            Facing
+            {t.player.facing}
           </Text>
         </View>
       }

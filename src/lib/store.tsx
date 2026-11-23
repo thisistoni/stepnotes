@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
-import { BUILT_IN_DANCES } from './builtins';
+import { BUILT_IN_IDS, builtInDances } from './builtins';
+import { useT, type Strings } from './i18n';
 import { DEFAULT_START, uid } from './pattern';
 import { usePersistedValue } from './persist';
 import type { Dance } from './types';
@@ -9,12 +10,10 @@ import { parseDance, parseDanceJson } from './validate';
 /** Keep this key: existing installs (and the web QA harness) store user dances under it. */
 export const STORAGE_KEY = 'stepnotes.dances.v1';
 
-const BUILT_IN_IDS = new Set(BUILT_IN_DANCES.map((d) => d.id));
-
 export interface DanceStore {
   /** false until the user's dances have been read from storage */
   ready: boolean;
-  /** user dances (newest first) followed by the built-in starter dances */
+  /** user dances (newest first) followed by the built-in starter dances (in the app's language) */
   dances: Dance[];
   custom: Dance[];
   get: (id: string) => Dance | undefined;
@@ -28,7 +27,7 @@ export interface DanceStore {
   remove: (id: string) => Promise<Dance | null>;
   /** Re-insert a dance removed with `remove`, at its old position in the list. */
   restore: (dance: Dance) => Promise<void>;
-  /** Copy any dance (built-in or not) into "My dances". Default name: "<name> (my version)". */
+  /** Copy any dance (built-in or not) into "My dances". Default name: "<name> (my version)", localised. */
   duplicate: (dance: Dance, name?: string) => Promise<Dance>;
   /** Parse pasted text and add it. Throws `DanceValidationError` with a user-facing message. */
   importJson: (json: string) => Promise<Dance>;
@@ -63,6 +62,12 @@ const EMPTY: Dance[] = [];
 
 export function DanceProvider({ children }: { children: ReactNode }) {
   const { value: custom, ready, update } = usePersistedValue<Dance[]>(STORAGE_KEY, EMPTY, sanitizeStored);
+  const t = useT();
+  /** latest dictionary for the actions (stable callbacks, current language) */
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   /** old positions of deleted dances, for restore() */
   const removedAt = useRef(new Map<string, number>());
 
@@ -107,7 +112,7 @@ export function DanceProvider({ children }: { children: ReactNode }) {
         const now = Date.now();
         const copy: Dance = {
           ...parseDance(dance), // deep copy + fresh id
-          name: name?.trim() || `${dance.name} (my version)`,
+          name: name?.trim() || tRef.current.common.myVersion(dance.name.trim() || tRef.current.common.untitled),
           createdAt: now,
           updatedAt: now,
         };
@@ -118,7 +123,7 @@ export function DanceProvider({ children }: { children: ReactNode }) {
 
   const importJson = useCallback(
     async (json: string) => {
-      const parsed = parseDanceJson(json); // throws a friendly DanceValidationError
+      const parsed = parseDanceJson(json, { untitled: tRef.current.common.untitled }); // throws a DanceValidationError
       return update((cur) => {
         const now = Date.now();
         const d: Dance = { ...parsed, createdAt: now, updatedAt: now };
@@ -129,7 +134,7 @@ export function DanceProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<DanceStore>(() => {
-    const dances = [...custom, ...BUILT_IN_DANCES];
+    const dances = [...custom, ...builtInDances(t)];
     const byId = new Map(dances.map((d) => [d.id, d]));
     return {
       ready,
@@ -143,7 +148,7 @@ export function DanceProvider({ children }: { children: ReactNode }) {
       duplicate,
       importJson,
     };
-  }, [custom, ready, save, remove, restore, duplicate, importJson]);
+  }, [custom, t, ready, save, remove, restore, duplicate, importJson]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -172,4 +177,9 @@ export function newDance(): Dance {
 export function exportJson(d: Dance) {
   const { builtIn: _b, ...rest } = d;
   return JSON.stringify({ app: 'stepnotes', version: 1, ...rest }, null, 2);
+}
+
+/** The text a share sends: one friendly line, then the dance (import ignores the text around it). */
+export function shareText(d: Dance, t: Strings) {
+  return `${t.share.prefix}\n\n${exportJson(d)}`;
 }

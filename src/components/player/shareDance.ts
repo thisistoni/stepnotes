@@ -1,7 +1,8 @@
 import { Platform, Share } from 'react-native';
 
 import type { ToastOptions } from '@/components/ui';
-import { exportJson } from '@/lib/store';
+import type { Strings } from '@/lib/i18n';
+import { shareText } from '@/lib/store';
 import type { Dance } from '@/lib/types';
 
 type Show = (opts: ToastOptions) => void;
@@ -15,14 +16,14 @@ function isAbort(e: unknown) {
  * sheet when there is one, otherwise the text is copied to the clipboard; if neither exists a toast
  * explains. Never throws.
  */
-export async function shareDance(dance: Dance, show: Show) {
-  const message = exportJson(dance);
-  const title = dance.name.trim() || 'Untitled dance';
+export async function shareDance(dance: Dance, t: Strings, show: Show) {
+  const message = shareText(dance, t);
+  const title = dance.name.trim() || t.common.untitled;
   if (Platform.OS !== 'web') {
     try {
       await Share.share({ title, message });
     } catch {
-      show({ message: 'Could not open sharing. Please try again.', icon: 'alert' });
+      show({ message: (tr) => tr.share.failed, icon: 'alert' });
     }
     return;
   }
@@ -40,11 +41,11 @@ export async function shareDance(dance: Dance, show: Show) {
   if (nav?.clipboard && typeof nav.clipboard.writeText === 'function') {
     try {
       await nav.clipboard.writeText(message);
-      show({ message: 'Dance copied. Paste it into a message to share it.', icon: 'clipboard' });
+      show({ message: (tr) => tr.share.copied, icon: 'clipboard' });
       return;
     } catch {
       // fall through
     }
   }
-  show({ message: 'This browser cannot share or copy. Open StepNotes on your phone to share.', icon: 'alert', duration: 5000 });
+  show({ message: (tr) => tr.share.unsupported, icon: 'alert', duration: 5000 });
 }

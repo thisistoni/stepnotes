@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { useT } from '@/lib/i18n';
 import { fonts, space } from '@/lib/theme';
 
 import { IconButton } from './IconButton';
@@ -47,6 +48,7 @@ export function Header({
   large,
   style,
 }: HeaderProps) {
+  const t = useT();
   if (large) {
     return (
       <View style={[s.large, style]}>
@@ -70,7 +72,7 @@ export function Header({
     leading === 'none' ? null : (
       <IconButton
         icon={leading === 'close' ? 'close' : 'back'}
-        label={leading === 'close' ? 'Close' : 'Back'}
+        label={leading === 'close' ? t.common.close : t.common.back}
         onPress={onBack ?? goBackOrHome}
         testID="header-back"
       />

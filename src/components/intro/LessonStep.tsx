@@ -4,6 +4,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { StepDiagram } from '@/components/StepDiagram';
 import { Entrance, Icon, IconButton, Stage, Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { DEFAULT_FOOT_STYLE, ROLE_COLOR, roleTheme, space } from '@/lib/theme';
 import type { Role } from '@/lib/types';
 
@@ -17,6 +18,7 @@ const STAGE_MAX = 420;
 
 /** Step 3 (and the stand-alone lesson): a live demo on the real diagram + a legend that follows it. */
 export function LessonStep({ role }: { role: Role }) {
+  const t = useT();
   const pattern = useMemo(() => demoPattern(role), [role]);
   const theme = roleTheme(role);
   const footStyle = DEFAULT_FOOT_STYLE[role];
@@ -30,7 +32,7 @@ export function LessonStep({ role }: { role: Role }) {
     <View style={[s.root, compact && s.rootCompact]} testID="intro-lesson">
       <Entrance index={0}>
         <Text variant={compact ? 'heading' : 'title'} accessibilityRole="header">
-          How to read the footprints
+          {t.lesson.title}
         </Text>
       </Entrance>
       <Entrance index={1} style={[s.stageWrap, compact && s.stageWrapCompact]}>
@@ -41,7 +43,7 @@ export function LessonStep({ role }: { role: Role }) {
           bottomRight={
             <IconButton
               icon={running ? 'pause' : 'play'}
-              label={running ? 'Pause the demo' : 'Play the demo'}
+              label={running ? t.lesson.pause : t.lesson.play}
               variant="primary"
               tone={tone}
               shape="round"
@@ -52,10 +54,10 @@ export function LessonStep({ role }: { role: Role }) {
             </IconButton>
           }
           bottomLeft={
-            <View style={[s.tag, { backgroundColor: tone.wash }]} accessible accessibilityLabel="Facing up the screen">
+            <View style={[s.tag, { backgroundColor: tone.wash }]} accessible accessibilityLabel={t.lesson.facingA11y}>
               <Icon name="arrow-up" size={14} color={tone.deep} strokeWidth={2.8} />
               <Text variant="overline" color={tone.deep}>
-                Facing
+                {t.lesson.facing}
               </Text>
             </View>
           }

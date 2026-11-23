@@ -3,23 +3,24 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { ChoiceRow, CoachBubble, Entrance, Text, useReducedMotion } from '@/components/ui';
+import { emphasis, useT } from '@/lib/i18n';
 import { motion, ROLE_COLOR, space, STYLE_COLORS, type ColorSet } from '@/lib/theme';
 import type { IconName } from '@/components/Icon';
 
 export type RoleChoice = 'leader' | 'follower' | 'both';
 
-const CHOICES: { key: RoleChoice; title: string; subtitle: string; icon: IconName; tone: ColorSet }[] = [
-  { key: 'leader', title: 'Leader', subtitle: 'I lead the steps', icon: 'flat-shoe', tone: ROLE_COLOR.leader },
-  { key: 'follower', title: 'Follower', subtitle: 'I follow my partner', icon: 'heel', tone: ROLE_COLOR.follower },
-  { key: 'both', title: 'Both / not sure', subtitle: 'Start as leader', icon: 'footprints', tone: STYLE_COLORS.bachata },
+const CHOICES: { key: RoleChoice; icon: IconName; tone: ColorSet }[] = [
+  { key: 'leader', icon: 'flat-shoe', tone: ROLE_COLOR.leader },
+  { key: 'follower', icon: 'heel', tone: ROLE_COLOR.follower },
+  { key: 'both', icon: 'footprints', tone: STYLE_COLORS.bachata },
 ];
 
-/** Coach line per selection: plain text with one emphasised phrase. */
-const COACH: Record<RoleChoice | 'none', { before: string; strong: string; after: string; tone: ColorSet }> = {
-  none: { before: 'You can ', strong: 'switch parts', after: ' in any dance later.', tone: STYLE_COLORS.bachata },
-  leader: { before: 'Leaders usually start on the ', strong: 'left foot', after: '. We’ll show their steps first.', tone: ROLE_COLOR.leader },
-  follower: { before: 'Followers usually start on the ', strong: 'right foot', after: '. We’ll show their steps first.', tone: ROLE_COLOR.follower },
-  both: { before: 'We’ll start with the leader. ', strong: 'Switch parts', after: ' in any dance.', tone: STYLE_COLORS.bachata },
+/** Coach bubble colour per selection (the text, with one **emphasised** phrase, is in the dictionary). */
+const COACH_TONE: Record<RoleChoice | 'none', ColorSet> = {
+  none: STYLE_COLORS.bachata,
+  leader: ROLE_COLOR.leader,
+  follower: ROLE_COLOR.follower,
+  both: STYLE_COLORS.bachata,
 };
 
 /** Re-plays a small pop whenever `id` changes (the coach "says" something new). */
@@ -44,22 +45,24 @@ export interface RoleStepProps {
 
 /** Step 2: which part do you dance? */
 export function RoleStep({ value, onChange }: RoleStepProps) {
-  const coach = COACH[value ?? 'none'];
+  const t = useT();
+  const key = value ?? 'none';
+  const tone = COACH_TONE[key];
   // short phones: a smaller title keeps the coach bubble on screen
   const compact = useWindowDimensions().height < 700;
   return (
     <View style={[s.root, compact && s.rootCompact]} testID="intro-role">
       <Entrance index={0}>
         <Text variant={compact ? 'title' : 'display'} accessibilityRole="header" style={s.title}>
-          Which part do you dance?
+          {t.intro.roleTitle}
         </Text>
       </Entrance>
       <View style={[s.choices, compact && s.choicesCompact]} accessibilityRole="radiogroup">
         {CHOICES.map((c, i) => (
           <Entrance key={c.key} index={2 + i}>
             <ChoiceRow
-              title={c.title}
-              subtitle={c.subtitle}
+              title={t.intro.choices[c.key].title}
+              subtitle={t.intro.choices[c.key].subtitle}
               icon={c.icon}
               tone={c.tone}
               selected={value === c.key}
@@ -71,13 +74,17 @@ export function RoleStep({ value, onChange }: RoleStepProps) {
       </View>
       <Entrance index={5} style={[s.coach, compact && s.coachCompact]}>
         <Pop id={value ?? 'none'}>
-          <CoachBubble tone={coach.tone}>
+          <CoachBubble tone={tone}>
             <Text variant="small" color="ink2" testID="role-coach">
-              {coach.before}
-              <Text variant="smallStrong" color={coach.tone.deep}>
-                {coach.strong}
-              </Text>
-              {coach.after}
+              {emphasis(t.intro.coach[key]).map((part, i) =>
+                part.strong ? (
+                  <Text key={i} variant="smallStrong" color={tone.deep}>
+                    {part.text}
+                  </Text>
+                ) : (
+                  part.text
+                ),
+              )}
             </Text>
           </CoachBubble>
         </Pop>

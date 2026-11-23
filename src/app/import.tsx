@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { Button, Entrance, Header, hapticNotify, Icon, Screen, Text, TextField, useToast } from '@/components/ui';
-import { PersistError } from '@/lib/persist';
+import { errorText, useT } from '@/lib/i18n';
 import { useDances } from '@/lib/store';
 import { colors, radius, space } from '@/lib/theme';
 import { DanceValidationError, parseDanceJson } from '@/lib/validate';
@@ -20,13 +20,13 @@ function webClipboard(): { readText: () => Promise<string> } | null {
   return read ? { readText: () => read.call(nav!.clipboard) } : null;
 }
 
-const NOT_A_DANCE = 'That doesn’t look like a StepNotes dance. Ask the sender to share it again.';
-
 export default function ImportScreen() {
   const { importJson } = useDances();
   const toast = useToast();
+  const t = useT();
   const [text, setText] = useState('');
-  const [error, setError] = useState<{ message: string; detail?: string } | null>(null);
+  /** what went wrong, kept as the error itself so its message follows the language */
+  const [failure, setFailure] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [clipboard] = useState(webClipboard);
   // live feedback: what will be added (before pressing the button)
@@ -35,52 +35,53 @@ export default function ImportScreen() {
     try {
       const d = parseDanceJson(text);
       const steps = Math.max(...Object.values(d.roles).map((p) => p?.steps.length ?? 0));
-      const parts = [d.style.trim(), `${steps} ${steps === 1 ? 'step' : 'steps'}`, d.roles.follower ? 'leader + follower' : ''].filter(Boolean);
-      return `Ready to add “${d.name.trim() || 'Untitled dance'}” · ${parts.join(' · ')}`;
+      return t.import.preview(d.name.trim() || t.common.untitled, d.style.trim(), steps, !!d.roles.follower);
     } catch {
       return null;
     }
-  }, [text]);
+  }, [text, t]);
+  // validation problems: the friendly line, plus the detail unless the text is no dance at all
+  const error =
+    failure == null
+      ? null
+      : failure instanceof DanceValidationError
+        ? { message: t.import.notADance, detail: failure.notADance ? undefined : failure.localized(t) }
+        : { message: errorText(failure, t, t.import.saveFailed) };
 
   const onImport = async () => {
     setBusy(true);
     try {
       const d = await importJson(text);
       hapticNotify('success');
-      toast.show({ message: `“${d.name}” added to your dances`, icon: 'check' });
+      toast.show({ message: (tr) => tr.import.added(d.name), icon: 'check' });
       router.replace(`/dance/${d.id}`);
     } catch (e) {
       setBusy(false);
       hapticNotify('error');
-      // validation errors are written for people; anything else (storage) gets a generic message
-      setError(
-        e instanceof DanceValidationError
-          ? { message: NOT_A_DANCE, detail: /StepNotes dance/i.test(e.message) ? undefined : e.message }
-          : { message: e instanceof PersistError ? e.message : 'Could not save this dance. Please try again.' },
-      );
+      setFailure(e);
     }
   };
 
   const paste = async () => {
     try {
-      const t = await clipboard?.readText();
-      if (t) {
-        setText(t);
-        setError(null);
+      const pasted = await clipboard?.readText();
+      if (pasted) {
+        setText(pasted);
+        setFailure(null);
       } else {
-        toast.show({ message: 'The clipboard is empty', icon: 'clipboard' });
+        toast.show({ message: (tr) => tr.import.clipboardEmpty, icon: 'clipboard' });
       }
     } catch {
-      toast.show({ message: 'Could not read the clipboard. Paste into the field instead.', icon: 'alert' });
+      toast.show({ message: (tr) => tr.import.clipboardFailed, icon: 'alert' });
     }
   };
 
   return (
     <Screen
-      header={<Header title="Import a dance" leading="close" />}
+      header={<Header title={t.import.title} leading="close" />}
       footer={
         <Button
-          label="Add to my dances"
+          label={t.import.submit}
           icon="import"
           disabled={!text.trim()}
           loading={busy}
@@ -97,25 +98,25 @@ export default function ImportScreen() {
           <Icon name="clipboard" size={26} color={colors.primary} strokeWidth={2.4} />
         </View>
         <Text variant="body" color="ink2" style={s.introText}>
-          Paste a dance someone shared with you. Extra text around it, like a chat message, is fine.
+          {t.import.intro}
         </Text>
       </Entrance>
 
       <Entrance index={1}>
         <View style={s.labelRow}>
           <Text variant="smallStrong" color="ink2" style={s.label}>
-            Shared dance
+            {t.import.field}
           </Text>
           {clipboard && (
-            <Button label="Paste" icon="clipboard" variant="secondary" size="sm" inline onPress={paste} testID="import-paste" />
+            <Button label={t.import.paste} icon="clipboard" variant="secondary" size="sm" inline onPress={paste} testID="import-paste" />
           )}
         </View>
         <TextField
-          accessibilityLabel="Shared dance"
+          accessibilityLabel={t.import.field}
           value={text}
-          onChangeText={(t) => {
-            setText(t);
-            setError(null);
+          onChangeText={(v) => {
+            setText(v);
+            setFailure(null);
           }}
           multiline
           minHeight={200}

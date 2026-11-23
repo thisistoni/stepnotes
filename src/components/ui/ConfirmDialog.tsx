@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { resolveText, useT, type Localized } from '@/lib/i18n';
 import { colors, layout, motion, radius, space, withAlpha } from '@/lib/theme';
 
 import { Icon, type IconName } from '../Icon';
@@ -10,11 +11,12 @@ import { Button } from './Button';
 import { useReducedMotion } from './feedback';
 import { Text } from './Text';
 
+/** Texts may be functions of the dictionary (`(t) => t.editor.discard`): resolved while shown. */
 export interface ConfirmOptions {
-  title: string;
-  message?: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
+  title: Localized;
+  message?: Localized;
+  confirmLabel?: Localized;
+  cancelLabel?: Localized;
   /** Red confirm button + warning tile */
   destructive?: boolean;
   icon?: IconName;
@@ -29,16 +31,21 @@ export interface ConfirmDialogProps extends ConfirmOptions {
 /** Centred confirmation card (replaces Alert.alert / window.confirm). Controlled. */
 export function ConfirmDialog({
   visible,
-  title,
-  message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  title: titleText,
+  message: messageText,
+  confirmLabel: confirmText,
+  cancelLabel: cancelText,
   destructive,
   icon,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   const reduced = useReducedMotion();
+  const tr = useT();
+  const title = resolveText(titleText, tr);
+  const message = messageText === undefined ? undefined : resolveText(messageText, tr);
+  const confirmLabel = resolveText(confirmText ?? tr.common.confirm, tr);
+  const cancelLabel = resolveText(cancelText ?? tr.common.cancel, tr);
   const [mounted, setMounted] = useState(visible);
   const t = useSharedValue(0);
   if (visible && !mounted) setMounted(true);

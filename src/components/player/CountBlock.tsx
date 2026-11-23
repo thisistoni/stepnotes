@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { FootBadge, Icon, Text, useReducedMotion } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import type { BarRange } from '@/lib/pattern';
 import { colors, lip, motion, radius, ROLE_COLOR, typography } from '@/lib/theme';
 import type { Role, Step } from '@/lib/types';
@@ -53,6 +54,7 @@ function numeralSize(label: string, compact: boolean) {
 const CountTile = memo(function CountTile({ role, step, index, compact }: { role: Role; step: Step | null; index: number; compact: boolean }) {
   const T = compact ? TILE.compact : TILE.regular;
   const c = ROLE_COLOR[role];
+  const t = useT();
   const reduced = useReducedMotion();
   const pop = useSharedValue(1);
   const fade = useSharedValue(1);
@@ -92,7 +94,7 @@ const CountTile = memo(function CountTile({ role, step, index, compact }: { role
       accessible
       accessibilityRole="text"
       accessibilityLiveRegion="polite"
-      accessibilityLabel={step ? `Count ${label}${hold ? ', hold' : step.kind === 'tap' ? ', tap' : ''}` : 'Ready, start position'}
+      accessibilityLabel={step ? t.count.tile(label, step.kind) : t.count.readyA11y}
       testID="count-tile"
     >
       <View style={[s.tileLip, { backgroundColor: c.lip, height: T.h }]} />
@@ -113,7 +115,7 @@ const CountTile = memo(function CountTile({ role, step, index, compact }: { role
             <>
               <Icon name="footprints" size={compact ? 26 : 30} color={c.on} />
               <Text variant="overline" color={c.on} style={s.ready}>
-                Ready
+                {t.count.ready}
               </Text>
             </>
           )}
@@ -123,7 +125,7 @@ const CountTile = memo(function CountTile({ role, step, index, compact }: { role
         <View style={s.tagRow} pointerEvents="none">
           <Animated.View style={[s.tag, { borderColor: c.base }, tagStyle]} testID="count-kind-tag">
             <Text variant="overline" color={c.deep} style={s.tagText}>
-              {hold ? 'Hold' : 'Tap'}
+              {hold ? t.count.hold : t.count.tap}
             </Text>
           </Animated.View>
         </View>
@@ -140,7 +142,8 @@ export const CountBlock = memo(function CountBlock({ role, steps, bars, index, l
   const step = index >= 0 ? (steps[index] ?? null) : null;
   const n = steps.length;
   const tone = ROLE_COLOR[role];
-  const overline = n === 0 ? 'No steps yet' : step ? `Step ${index + 1} of ${n}` : `Ready · ${n} ${n === 1 ? 'step' : 'steps'}`;
+  const t = useT();
+  const overline = n === 0 ? t.count.noSteps : step ? t.count.stepOf(index + 1, n) : t.count.readyOf(n);
   const both = lines.length > 1;
   return (
     <View style={{ height: countBlockHeight(compact) }} testID="count-block">

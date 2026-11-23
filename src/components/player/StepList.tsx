@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card, CountBadge, FootBadge, Segmented, Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { computeStates, describeStep, stepBeats } from '@/lib/pattern';
 import { colors, radius, ROLE_COLOR, space, TONE } from '@/lib/theme';
 import { type Pattern, type Role, type Step } from '@/lib/types';
@@ -18,14 +19,6 @@ interface Props {
   action?: { label: string; onPress: () => void };
 }
 
-function lengthLabel(st: Step) {
-  const b = stepBeats(st);
-  if (b === 1) return '';
-  if (b === 0.5) return '½ beat';
-  if (b === 0.25) return '¼ beat';
-  if (b === 1.5) return '1½ beats';
-  return `${Number(b.toFixed(2))} beats`;
-}
 
 const Row = memo(function Row({
   i,
@@ -43,16 +36,18 @@ const Row = memo(function Row({
   onJump: (i: number) => void;
 }) {
   const c = ROLE_COLOR[role];
-  const len = lengthLabel(step);
-  const kind = step.kind !== 'step' ? (step.kind === 'tap' ? 'Tap' : 'Hold') : '';
+  const t = useT();
+  const b = stepBeats(step);
+  const len = b === 1 ? '' : t.units.beats(b);
+  const kind = step.kind !== 'step' ? (step.kind === 'tap' ? t.steps.tap : t.steps.hold) : '';
   return (
     <Pressable
       onPress={() => onJump(i)}
       accessibilityRole="button"
-      accessibilityLabel={`Count ${step.count}. ${text}${step.note ? `. ${step.note}` : ''}`}
+      accessibilityLabel={t.steps.row(step.count, text, step.note)}
       accessibilityState={{ selected: current }}
       aria-selected={current}
-      accessibilityHint="Shows this step on the stage"
+      accessibilityHint={t.steps.rowHint}
       testID={`step-row-${i}`}
       style={({ pressed }) => [s.row, current && { backgroundColor: c.wash, borderColor: c.border }, pressed && !current && s.pressed]}
     >
@@ -92,25 +87,26 @@ const Row = memo(function Row({
 
 /** "All steps" card: every step with count, foot, description and note; tap a row to show it. */
 export const StepList = memo(function StepList({ role, pattern, index, onJump, roleSwitch, action }: Props) {
+  const t = useT();
   const states = useMemo(() => computeStates(pattern), [pattern]);
-  const texts = useMemo(() => pattern.steps.map((st, i) => describeStep(st, states[i])), [pattern, states]);
+  const texts = useMemo(() => pattern.steps.map((st, i) => describeStep(st, states[i], t)), [pattern, states, t]);
   return (
     <Card padding={0} testID="step-list">
       <View style={s.head}>
         <View style={s.title}>
-          <Text variant="cardTitle">All steps</Text>
+          <Text variant="cardTitle">{t.steps.title}</Text>
           <CountBadge value={pattern.steps.length} />
         </View>
         {roleSwitch ? (
           <Segmented
             variant="compact"
             itemWidth={78}
-            label="Steps of"
+            label={t.steps.of}
             value={roleSwitch.value}
             onChange={roleSwitch.onChange}
             options={[
-              { value: 'leader', label: 'Leader', tone: TONE.primary },
-              { value: 'follower', label: 'Follower', tone: TONE.follower },
+              { value: 'leader', label: t.roles.leader, tone: TONE.primary },
+              { value: 'follower', label: t.roles.follower, tone: TONE.follower },
             ]}
             style={s.switch}
             testID="steps-role"
@@ -125,7 +121,7 @@ export const StepList = memo(function StepList({ role, pattern, index, onJump, r
       </View>
       {pattern.steps.length === 0 ? (
         <Text variant="small" color="ink2" style={s.empty}>
-          No steps yet. Open the editor to place the first one.
+          {t.steps.empty}
         </Text>
       ) : (
         <View style={s.list}>

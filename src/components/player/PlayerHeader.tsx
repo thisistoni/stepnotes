@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { goBackOrHome, IconButton, Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { space } from '@/lib/theme';
 
 interface Props {
@@ -22,12 +23,15 @@ export const PLAYER_HEADER_H = 64;
  * action buttons on the right would leave a centred title ~140px at 390 wide).
  */
 export function PlayerHeader({ title, style, meta, dot, right }: Props) {
-  const size = title.length <= 18 ? undefined : s.titleSmall;
+  // long titles (German starter names: "Bachata Grundschritt seitwärts") get a smaller size and may
+  // take a second line instead of being cut; both lines + the meta line still fit the 64px bar
+  const long = title.length > 18;
+  const t = useT();
   return (
     <View style={s.bar}>
-      <IconButton icon="back" label="Back" onPress={goBackOrHome} testID="header-back" />
+      <IconButton icon="back" label={t.common.back} onPress={goBackOrHome} testID="header-back" />
       <View style={s.center}>
-        <Text variant="heading" numberOfLines={1} accessibilityRole="header" style={size} testID="player-title">
+        <Text variant="heading" numberOfLines={long ? 2 : 1} accessibilityRole="header" style={long && s.titleSmall} testID="player-title">
           {title}
         </Text>
         <View style={s.subRow}>
@@ -50,7 +54,7 @@ export function PlayerHeader({ title, style, meta, dot, right }: Props) {
 const s = StyleSheet.create({
   bar: { height: PLAYER_HEADER_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: space.m },
   center: { flex: 1, minWidth: 0 },
-  titleSmall: { fontSize: 17, lineHeight: 22 },
+  titleSmall: { fontSize: 16, lineHeight: 19 },
   subRow: { flexDirection: 'row', alignItems: 'center', columnGap: 4, marginTop: 1 },
   sub: { flexShrink: 1 },
   meta: { flexShrink: 0 },

@@ -46,6 +46,7 @@ import {
   type LiveStep,
   type Vec,
 } from '@/lib/chartLayout';
+import { useT } from '@/lib/i18n';
 import {
   buildTimeline,
   computeStates,
@@ -585,6 +586,7 @@ function FocusUnder({
 }
 
 function FocusOver({ live, index, theme, unit }: { live: LiveLayout; index: number; theme: RoleTheme; unit: number }) {
+  const tapLabel = useT().count.tap.toUpperCase();
   const cur = index >= 0 ? live.steps[index] : null;
   if (!cur?.arrow) return null;
   // legible on small stages, but never so big it dwarfs the feet
@@ -601,7 +603,7 @@ function FocusOver({ live, index, theme, unit }: { live: LiveLayout; index: numb
     vx /= l;
     vy /= l;
     const h = Math.max(0.62, 17 * unit);
-    const w = h * 2.15;
+    const w = h * (0.55 + 0.53 * tapLabel.length);
     const d = r + (Math.abs(vx) > Math.abs(vy) ? w / 2 : h / 2) + 0.06;
     tag = { x: badge.x + vx * d, y: badge.y + vy * d, w, h };
   }
@@ -632,7 +634,7 @@ function FocusOver({ live, index, theme, unit }: { live: LiveLayout; index: numb
             textAnchor="middle"
             letterSpacing={tag.h * 0.04}
           >
-            TAP
+            {tapLabel}
           </SvgText>
         </G>
       )}

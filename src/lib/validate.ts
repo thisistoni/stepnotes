@@ -9,24 +9,50 @@
  * (numeric strings are accepted) and are clamped into sane ranges (bpm 20–300, beats/bar 1–12,
  * positions ±50); a step's length must be > 0; `videoUrl` is kept only if it is http(s);
  * missing or duplicate step ids are generated. Anything that cannot be repaired throws a
- * `DanceValidationError` whose message can be shown to the user as is.
+ * `DanceValidationError`; show `err.localized(t)` to the user (`message` is English, for logs).
  */
+import { en, type Strings } from './i18n/en';
 import { DEFAULT_START, uid } from './pattern';
 import type { Dance, Foot, FootPos, FootStyle, Pattern, Role, Step, StepKind } from './types';
 
+/** Where a problem is: e.g. { role: 'leader', step: 3 } → "Leader part, step 3". Empty = whole document. */
+export interface ValidationWhere {
+  role?: Role;
+  start?: boolean;
+  /** 1-based */
+  step?: number;
+}
+
+/** A problem, written by each dictionary: `(v) => v.missing('bpm')`. */
+type Issue = (v: Strings['validation']) => string;
+
 export class DanceValidationError extends Error {
-  /** Where the problem is, e.g. "leader part, step 3". Empty for whole-document problems. */
-  readonly where: string;
-  constructor(message: string, where = '') {
-    super(where ? `${capitalise(where)}: ${message}` : message);
+  readonly where: ValidationWhere;
+  readonly issue: Issue;
+  /** true when the text is not a dance at all (as opposed to one broken detail) */
+  readonly notADance: boolean;
+  constructor(issue: Issue, where: ValidationWhere = {}, notADance = false) {
+    super(format(en, issue, where));
     this.name = 'DanceValidationError';
     this.where = where;
+    this.issue = issue;
+    this.notADance = notADance;
   }
+  /** The message in the user's language. */
+  localized(t: Strings) {
+    return format(t, this.issue, this.where);
+  }
+}
+
+function format(t: Strings, issue: Issue, where: ValidationWhere) {
+  return t.validation.withWhere(t.validation.where(where), issue(t.validation));
 }
 
 export interface ParseOptions {
   /** Keep the incoming id (loading from storage). Default false: a fresh id is generated (import). */
   keepId?: boolean;
+  /** Name for a dance without one (default: the English "Untitled dance") */
+  untitled?: string;
 }
 
 export const LIMITS = {
@@ -45,32 +71,23 @@ export const LIMITS = {
 
 const KINDS: StepKind[] = ['step', 'tap', 'hold'];
 const STYLES: FootStyle[] = ['shoe', 'heel'];
-const ROLE_NAME: Record<Role, string> = { leader: 'leader part', follower: 'follower part' };
-
-function capitalise(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-function str(v: unknown, max: number, where: string, field: string, fallback = ''): string {
+function str(v: unknown, max: number, where: ValidationWhere, field: string, fallback = ''): string {
   if (v === undefined || v === null) return fallback;
   if (typeof v === 'number' && Number.isFinite(v)) return String(v).slice(0, max);
-  if (typeof v !== 'string') throw new DanceValidationError(`“${field}” should be text.`, where);
+  if (typeof v !== 'string') throw new DanceValidationError((m) => m.notText(field), where);
   return v.trim().slice(0, max);
 }
 
 /** Number or numeric string -> finite number, else throws. `undefined` -> fallback. */
-function num(v: unknown, where: string, field: string, fallback?: number): number {
+function num(v: unknown, where: ValidationWhere, field: string, fallback?: number): number {
   if ((v === undefined || v === null || v === '') && fallback !== undefined) return fallback;
   const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
   if (!Number.isFinite(n)) {
-    throw new DanceValidationError(
-      v === undefined || v === null ? `“${field}” is missing.` : `“${field}” should be a number.`,
-      where,
-    );
+    throw new DanceValidationError(v === undefined || v === null ? (m) => m.missing(field) : (m) => m.notNumber(field), where);
   }
   return n;
 }
@@ -87,8 +104,8 @@ function normRot(r: number) {
   return d === 0 ? 0 : d; // no -0
 }
 
-function footPos(v: unknown, where: string, field: string): FootPos {
-  if (!isObject(v)) throw new DanceValidationError(`“${field}” (the foot position) is missing.`, where);
+function footPos(v: unknown, where: ValidationWhere, field: string): FootPos {
+  if (!isObject(v)) throw new DanceValidationError((m) => m.positionMissing(field), where);
   const c = LIMITS.coord;
   return {
     x: clamp(num(v.x, where, `${field}.x`), -c, c),
@@ -97,41 +114,41 @@ function footPos(v: unknown, where: string, field: string): FootPos {
   };
 }
 
-function foot(v: unknown, where: string): Foot {
+function foot(v: unknown, where: ValidationWhere): Foot {
   const s = typeof v === 'string' ? v.trim().toUpperCase() : '';
   if (s === 'L' || s === 'LEFT') return 'L';
   if (s === 'R' || s === 'RIGHT') return 'R';
-  throw new DanceValidationError('“foot” should be "L" or "R".', where);
+  throw new DanceValidationError((m) => m.badFoot, where);
 }
 
 function pattern(v: unknown, role: Role): Pattern {
-  const where = ROLE_NAME[role];
-  if (!isObject(v)) throw new DanceValidationError('is missing or not a list of steps.', where);
+  const where: ValidationWhere = { role };
+  if (!isObject(v)) throw new DanceValidationError((m) => m.partMissing, where);
+  const atStart: ValidationWhere = { role, start: true };
   const start: Record<Foot, FootPos> = isObject(v.start)
     ? {
-        L: v.start.L === undefined ? { ...DEFAULT_START.L } : footPos(v.start.L, `${where}, start position`, 'L'),
-        R: v.start.R === undefined ? { ...DEFAULT_START.R } : footPos(v.start.R, `${where}, start position`, 'R'),
+        L: v.start.L === undefined ? { ...DEFAULT_START.L } : footPos(v.start.L, atStart, 'L'),
+        R: v.start.R === undefined ? { ...DEFAULT_START.R } : footPos(v.start.R, atStart, 'R'),
       }
     : { L: { ...DEFAULT_START.L }, R: { ...DEFAULT_START.R } };
-  if (v.steps === undefined) throw new DanceValidationError('has no steps.', where);
-  if (!Array.isArray(v.steps)) throw new DanceValidationError('“steps” should be a list.', where);
-  if (v.steps.length > LIMITS.steps) {
-    throw new DanceValidationError(`has ${v.steps.length} steps; the maximum is ${LIMITS.steps}.`, where);
-  }
+  if (v.steps === undefined) throw new DanceValidationError((m) => m.noSteps, where);
+  if (!Array.isArray(v.steps)) throw new DanceValidationError((m) => m.stepsNotList, where);
+  const count = v.steps.length;
+  if (count > LIMITS.steps) throw new DanceValidationError((m) => m.tooManySteps(count, LIMITS.steps), where);
 
   const seen = new Set<string>();
   const pos = { ...start };
   const steps = v.steps.map((raw, i): Step => {
-    const w = `${where}, step ${i + 1}`;
-    if (!isObject(raw)) throw new DanceValidationError('is not a step.', w);
+    const w: ValidationWhere = { role, step: i + 1 };
+    if (!isObject(raw)) throw new DanceValidationError((m) => m.notAStep, w);
     const kindRaw = raw.kind === undefined ? 'step' : raw.kind;
     if (typeof kindRaw !== 'string' || !KINDS.includes(kindRaw as StepKind)) {
-      throw new DanceValidationError('“kind” should be "step", "tap" or "hold".', w);
+      throw new DanceValidationError((m) => m.badKind, w);
     }
     const kind = kindRaw as StepKind;
     const f = foot(raw.foot, w);
     const beats = num(raw.beats, w, 'beats', 1);
-    if (beats <= 0) throw new DanceValidationError('“beats” (the step length) must be greater than 0.', w);
+    if (beats <= 0) throw new DanceValidationError((m) => m.badBeats, w);
     // a hold does not move, so a missing position is harmless: keep the foot where it is
     const to = kind === 'hold' && raw.to === undefined ? { ...pos[f] } : footPos(raw.to, w, 'to');
     if (kind !== 'hold') pos[f] = to;
@@ -171,10 +188,11 @@ function timestamp(v: unknown, fallback: number) {
 
 /** Validate and normalise anything into a `Dance`. Throws `DanceValidationError`. */
 export function parseDance(input: unknown, options: ParseOptions = {}): Dance {
-  if (!isObject(input)) throw new DanceValidationError('This does not look like a StepNotes dance.');
+  if (!isObject(input)) throw new DanceValidationError((m) => m.notADance, {}, true);
   if (!isObject(input.roles) || input.roles.leader === undefined) {
-    throw new DanceValidationError('This does not look like a StepNotes dance (it has no steps).');
+    throw new DanceValidationError((m) => m.noRoles, {}, true);
   }
+  const doc: ValidationWhere = {};
   const now = Date.now();
   const roles: Dance['roles'] = { leader: pattern(input.roles.leader, 'leader') };
   if (input.roles.follower !== undefined && input.roles.follower !== null) {
@@ -183,11 +201,11 @@ export function parseDance(input: unknown, options: ParseOptions = {}): Dance {
 
   const dance: Dance = {
     id: (options.keepId && safeId(input.id)) || uid('dance'),
-    name: str(input.name, LIMITS.name, '', 'name') || 'Untitled dance',
-    style: str(input.style, LIMITS.style, '', 'style'),
-    description: str(input.description, LIMITS.description, '', 'description'),
-    bpm: Math.round(clamp(num(input.bpm, '', 'bpm', 120), LIMITS.bpm[0], LIMITS.bpm[1])),
-    beatsPerBar: Math.round(clamp(num(input.beatsPerBar, '', 'beatsPerBar', 4), LIMITS.beatsPerBar[0], LIMITS.beatsPerBar[1])),
+    name: str(input.name, LIMITS.name, doc, 'name') || options.untitled || en.common.untitled,
+    style: str(input.style, LIMITS.style, doc, 'style'),
+    description: str(input.description, LIMITS.description, doc, 'description'),
+    bpm: Math.round(clamp(num(input.bpm, doc, 'bpm', 120), LIMITS.bpm[0], LIMITS.bpm[1])),
+    beatsPerBar: Math.round(clamp(num(input.beatsPerBar, doc, 'beatsPerBar', 4), LIMITS.beatsPerBar[0], LIMITS.beatsPerBar[1])),
     roles,
     createdAt: timestamp(input.createdAt, now),
     updatedAt: timestamp(input.updatedAt, now),
@@ -212,21 +230,15 @@ export function parseDance(input: unknown, options: ParseOptions = {}): Dance {
  */
 export function parseDanceJson(text: string, options: ParseOptions = {}): Dance {
   const trimmed = text.trim();
-  if (!trimmed) throw new DanceValidationError('Paste a dance first.');
+  if (!trimmed) throw new DanceValidationError((m) => m.empty);
   const first = trimmed.indexOf('{');
   const last = trimmed.lastIndexOf('}');
-  if (first < 0 || last <= first) {
-    throw new DanceValidationError(
-      'This is not a StepNotes dance. A shared dance is a block of text that starts with { and ends with }.',
-    );
-  }
+  if (first < 0 || last <= first) throw new DanceValidationError((m) => m.noJson, {}, true);
   let data: unknown;
   try {
     data = JSON.parse(trimmed.slice(first, last + 1));
   } catch {
-    throw new DanceValidationError(
-      'This text could not be read. It may have been cut off or changed: copy the whole shared text again, from { to }.',
-    );
+    throw new DanceValidationError((m) => m.badJson);
   }
   return parseDance(data, options);
 }

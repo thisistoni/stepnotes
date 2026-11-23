@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { useT } from '@/lib/i18n';
 import { colors, radius } from '@/lib/theme';
 
 import { hapticSelect } from './feedback';
@@ -26,6 +27,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 
 /** − value + with hold-to-repeat (speeds up while held). Adjustable for screen readers. */
 export function Stepper({ value, onChange, min = -Infinity, max = Infinity, step = 1, label, unit, format, disabled, style }: StepperProps) {
+  const t = useT();
   const latest = useRef(value);
   useEffect(() => {
     latest.current = value;
@@ -56,7 +58,7 @@ export function Stepper({ value, onChange, min = -Infinity, max = Infinity, step
   const button = (dir: 1 | -1) => (
     <IconButton
       icon={dir === 1 ? 'plus' : 'minus'}
-      label={`${dir === 1 ? 'Increase' : 'Decrease'} ${label}`}
+      label={dir === 1 ? t.common.increase(label) : t.common.decrease(label)}
       size={44}
       disabled={disabled || (dir === 1 ? value >= max : value <= min)}
       onPress={() => bump(dir)}

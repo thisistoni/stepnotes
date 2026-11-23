@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet } from 'react-native';
 
 import { Chip } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { space, styleColor } from '@/lib/theme';
 
 import type { StyleFilter } from './useLibrary';
@@ -15,6 +16,7 @@ export function StyleFilterChips({
   value: string | null;
   onChange: (key: string | null) => void;
 }) {
+  const t = useT();
   return (
     <ScrollView
       horizontal
@@ -22,10 +24,10 @@ export function StyleFilterChips({
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={s.row}
       style={s.scroll}
-      accessibilityLabel="Filter by style"
+      accessibilityLabel={t.library.filterBy}
       accessibilityRole="radiogroup"
     >
-      <Chip label="All" selected={value === null} onPress={() => onChange(null)} testID="filter-all" />
+      <Chip label={t.library.all} selected={value === null} onPress={() => onChange(null)} testID="filter-all" />
       {filters.map((f) => (
         <Chip
           key={f.key}
@@ -33,7 +35,7 @@ export function StyleFilterChips({
           dot={styleColor(f.label).base}
           selected={value === f.key}
           onPress={() => onChange(value === f.key ? null : f.key)}
-          accessibilityLabel={`${f.label} dances`}
+          accessibilityLabel={t.library.styleChip(f.label)}
           testID={`filter-${f.key}`}
         />
       ))}

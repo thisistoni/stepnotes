@@ -246,6 +246,12 @@ export const STYLE_COLORS: Record<string, ColorSet> = {
   latin: set(P.latin, P.latinLip, P.latinTint, P.latinDeep, P.ink),
 };
 
+/** Other names for the same styles (German labels of the starter dances), by lower-case name. */
+const STYLE_ALIASES: Record<string, keyof typeof STYLE_COLORS> = {
+  standard: 'ballroom',
+  latein: 'latin',
+};
+
 /** Fallback colours for any other style name (picked by a stable hash of the name). */
 export const EXTRA_STYLE_COLORS: ColorSet[] = [
   set(P.teal, P.tealLip, P.tealTint, P.tealDeep),
@@ -259,13 +265,14 @@ export const EXTRA_STYLE_COLORS: ColorSet[] = [
 export const NEUTRAL_STYLE: ColorSet = TONE.neutral;
 
 /**
- * Colour set for a dance style: case-insensitive, known styles first, any other name gets a
+ * Colour set for a dance style: case-insensitive, known styles first (also by their German names:
+ * "Standard" is the ballroom colour, "Latein" the latin one), any other name gets a
  * deterministic colour from `EXTRA_STYLE_COLORS`, an empty name gets `NEUTRAL_STYLE`.
  */
 export function styleColor(styleName: string | undefined | null): ColorSet {
   const key = (styleName ?? '').trim().toLowerCase();
   if (!key) return NEUTRAL_STYLE;
-  const known = STYLE_COLORS[key];
+  const known = STYLE_COLORS[STYLE_ALIASES[key] ?? key];
   if (known) return known;
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;

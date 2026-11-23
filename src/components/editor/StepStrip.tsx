@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState, type ComponentRef, type ReactNode } 
 import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
 import { Icon, IconButton, PressableLip, Text, hapticSelect } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { colors, lip, radius, ROLE_COLOR, space } from '@/lib/theme';
 import type { Role, Step } from '@/lib/types';
 
@@ -19,6 +20,7 @@ export interface StepStripProps {
  * kept in view. The `+` button (outside the scroller, always reachable) adds after the selection.
  */
 export const StepStrip = memo(function StepStrip({ steps, role, sel, onSelect, onAdd }: StepStripProps) {
+  const t = useT();
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const xs = useRef<Record<number, { x: number; w: number }>>({});
   const [viewW, setViewW] = useState(0);
@@ -42,7 +44,7 @@ export const StepStrip = memo(function StepStrip({ steps, role, sel, onSelect, o
     }
   };
 
-  const addLabel = sel < 0 ? 'Add the first step' : `Add a step after step ${sel + 1}`;
+  const addLabel = sel < 0 ? t.strip.addFirst : t.strip.addAfter(sel + 1);
   return (
     <View style={s.row}>
       <ScrollView
@@ -59,10 +61,10 @@ export const StepStrip = memo(function StepStrip({ steps, role, sel, onSelect, o
         testID="step-strip"
       >
         <View onLayout={(e) => measure(-1, e)}>
-          <StripChip role={role} selected={sel === -1} onPress={() => onSelect(-1)} label="Start position" testID="strip-start">
+          <StripChip role={role} selected={sel === -1} onPress={() => onSelect(-1)} label={t.strip.startA11y} testID="strip-start">
             <Icon name="footprints" size={18} color={sel === -1 ? colors.onColor : ROLE_COLOR[role].base} />
             <Text variant="smallStrong" color={sel === -1 ? colors.onColor : colors.ink}>
-              Start
+              {t.strip.start}
             </Text>
           </StripChip>
         </View>
@@ -100,16 +102,16 @@ const StepChip = memo(function StepChip({
   onSelect: (i: number) => void;
 }) {
   const c = ROLE_COLOR[role];
+  const t = useT();
   const hold = step.kind === 'hold';
   const tap = step.kind === 'tap';
   const count = step.count.trim() || '?';
-  const what = hold ? 'hold' : `${step.foot === 'L' ? 'left' : 'right'} foot${tap ? ' tap' : ''}`;
   // letter disc: solid for a step, outlined for a tap, a pause bar pair for a hold
   const discBg = hold ? 'transparent' : tap ? 'transparent' : selected ? colors.card : c.base;
   const discBorder = selected ? colors.card : c.base;
   const discFg = tap ? (selected ? colors.onColor : c.deep) : selected ? c.deep : c.on;
   return (
-    <StripChip role={role} selected={selected} onPress={() => onSelect(index)} label={`Step ${index + 1}, count ${count}, ${what}`} testID={`strip-step-${index}`}>
+    <StripChip role={role} selected={selected} onPress={() => onSelect(index)} label={t.strip.chip(index + 1, count, step.kind, step.foot)} testID={`strip-step-${index}`}>
       <Text variant="numeralSm" color={selected ? colors.onColor : colors.ink} style={s.count} numberOfLines={1}>
         {count}
       </Text>

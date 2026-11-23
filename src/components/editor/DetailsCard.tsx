@@ -2,13 +2,13 @@ import { useRef, type ComponentRef } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
 import { Card, Chip, Icon, IconButton, Segmented, Stepper, Text, TextField, type SegmentedOption, type TextFieldProps } from '@/components/ui';
-import { colors, DEFAULT_FOOT_STYLE, radius, ROLE_COLOR, space, STYLE_COLORS, styleColor } from '@/lib/theme';
-import { ROLE_LABEL, type Dance, type FootStyle, type Role } from '@/lib/types';
+import { useT, type Strings } from '@/lib/i18n';
+import { colors, DEFAULT_FOOT_STYLE, radius, ROLE_COLOR, space, styleColor } from '@/lib/theme';
+import type { Dance, FootStyle, Role } from '@/lib/types';
 
 import { useReveal } from './reveal';
 
 export const BPM_RANGE = [20, 300] as const;
-const KNOWN_STYLES = Object.keys(STYLE_COLORS).map((k) => k.charAt(0).toUpperCase() + k.slice(1));
 const BAR_OPTIONS = [3, 4, 6];
 
 export interface DetailsCardProps {
@@ -19,13 +19,14 @@ export interface DetailsCardProps {
   onChange: (patch: Partial<Dance>, group?: string) => void;
   /** a text field lost focus (ends the typing undo group) */
   onSeal: () => void;
-  videoError: string | null;
+  /** the video link is not a web address */
+  videoError: boolean;
   onVideoBlur: () => void;
 }
 
 /** "Salsa · 4/4 · 120 bpm" */
-export function detailsSummary(d: Dance) {
-  return [d.style.trim(), `${d.beatsPerBar}/4`, `${d.bpm} bpm`].filter(Boolean).join(' · ');
+export function detailsSummary(d: Dance, t: Strings) {
+  return [d.style.trim(), t.units.meter(d.beatsPerBar), t.units.bpm(d.bpm)].filter(Boolean).join(' · ');
 }
 
 /**
@@ -33,16 +34,17 @@ export function detailsSummary(d: Dance) {
  * Collapsed it is a one-line summary card that opens on tap.
  */
 export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, videoError, onVideoBlur }: DetailsCardProps) {
+  const t = useT();
   const tone = styleColor(draft.style);
-  const name = draft.name.trim() || 'Untitled dance';
+  const name = draft.name.trim() || t.common.untitled;
 
   if (!expanded) {
     return (
       <Card
         onPress={onToggle}
         padding={12}
-        accessibilityLabel={`Details: ${name}, ${detailsSummary(draft)}`}
-        accessibilityHint="Opens the dance details"
+        accessibilityLabel={t.details.summaryA11y(name, detailsSummary(draft, t))}
+        accessibilityHint={t.details.openHint}
         testID="details-collapsed"
         contentStyle={s.collapsed}
       >
@@ -54,7 +56,7 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
             {name}
           </Text>
           <Text variant="caption" color="ink2" numberOfLines={2} style={s.summaryMeta}>
-            {detailsSummary(draft)}
+            {detailsSummary(draft, t)}
           </Text>
         </View>
         <View style={s.editPill}>
@@ -66,25 +68,25 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
 
   const barOptions = BAR_OPTIONS.includes(draft.beatsPerBar) ? BAR_OPTIONS : [...BAR_OPTIONS, draft.beatsPerBar].sort((a, b) => a - b);
   const footOptions = (role: Role): SegmentedOption<FootStyle>[] => [
-    { value: 'shoe', label: 'Flat', icon: 'flat-shoe', accessibilityLabel: `${ROLE_LABEL[role]}: flat shoe footprints` },
-    { value: 'heel', label: 'Heel', icon: 'heel', accessibilityLabel: `${ROLE_LABEL[role]}: heel footprints` },
+    { value: 'shoe', label: t.details.flat, icon: 'flat-shoe', accessibilityLabel: t.details.flatA11y(t.roles[role]) },
+    { value: 'heel', label: t.details.heel, icon: 'heel', accessibilityLabel: t.details.heelA11y(t.roles[role]) },
   ];
 
   return (
     <Card padding={16} contentStyle={s.form}>
       <View style={s.headRow}>
         <Text variant="cardTitle" accessibilityRole="header" style={s.flex}>
-          Details
+          {t.details.title}
         </Text>
-        <IconButton icon="chevron-up" label="Collapse details" variant="ghost" size={40} iconSize={20} onPress={onToggle} testID="details-collapse" />
+        <IconButton icon="chevron-up" label={t.details.collapse} variant="ghost" size={40} iconSize={20} onPress={onToggle} testID="details-collapse" />
       </View>
 
       <Field
-        label="Name"
+        label={t.details.name}
         value={draft.name}
         onChangeText={(v) => onChange({ name: v }, 'name')}
         onBlur={onSeal}
-        placeholder="Untitled dance"
+        placeholder={t.common.untitled}
         maxLength={120}
         returnKeyType="done"
         testID="field-name"
@@ -92,17 +94,17 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
 
       <View>
         <Field
-          label="Style"
+          label={t.details.style}
           value={draft.style}
           onChangeText={(v) => onChange({ style: v }, 'style')}
           onBlur={onSeal}
-          placeholder="Salsa, Tango, Line dance…"
+          placeholder={t.details.stylePlaceholder}
           maxLength={60}
           returnKeyType="done"
           testID="field-style"
         />
-        <View style={s.chips} accessibilityRole="radiogroup" accessibilityLabel="Common styles">
-          {KNOWN_STYLES.map((st) => (
+        <View style={s.chips} accessibilityRole="radiogroup" accessibilityLabel={t.details.commonStyles}>
+          {t.styles.map((st) => (
             <Chip
               key={st}
               label={st}
@@ -117,10 +119,10 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
 
       <View style={s.tempoRow}>
         <View>
-          <Label>Tempo</Label>
+          <Label>{t.details.tempo}</Label>
           <Stepper
-            label="Tempo"
-            unit="bpm"
+            label={t.details.tempo}
+            unit={t.units.bpmUnit}
             value={draft.bpm}
             min={BPM_RANGE[0]}
             max={BPM_RANGE[1]}
@@ -128,9 +130,9 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
           />
         </View>
         <View style={s.barCol}>
-          <Label>Beats per bar</Label>
+          <Label>{t.details.beatsPerBar}</Label>
           <Segmented
-            label="Beats per bar"
+            label={t.details.beatsPerBar}
             options={barOptions.map((n) => ({ value: String(n), label: String(n) }))}
             value={String(draft.beatsPerBar)}
             onChange={(v) => onChange({ beatsPerBar: Number(v) })}
@@ -141,16 +143,16 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
       </View>
 
       <View>
-        <Label>Footprints</Label>
+        <Label>{t.details.footprints}</Label>
         <View style={s.footRows}>
           {(['leader', 'follower'] as Role[]).map((role) => (
             <View key={role} style={s.footRow}>
               <View style={[s.roleDot, { backgroundColor: ROLE_COLOR[role].base }]} />
               <Text variant="smallStrong" style={s.roleName}>
-                {ROLE_LABEL[role]}
+                {t.roles[role]}
               </Text>
               <Segmented
-                label={`${ROLE_LABEL[role]} footprints`}
+                label={t.details.footprintsOf(t.roles[role])}
                 options={footOptions(role)}
                 value={draft.footStyle?.[role] ?? DEFAULT_FOOT_STYLE[role]}
                 onChange={(v) => onChange({ footStyle: { ...draft.footStyle, [role]: v } })}
@@ -163,11 +165,11 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
       </View>
 
       <Field
-        label="Description"
+        label={t.details.description}
         value={draft.description}
         onChangeText={(v) => onChange({ description: v }, 'description')}
         onBlur={onSeal}
-        placeholder="Technique tips, styling, what to feel…"
+        placeholder={t.details.descriptionPlaceholder}
         multiline
         minHeight={96}
         maxLength={4000}
@@ -175,7 +177,7 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
       />
 
       <Field
-        label="Video link"
+        label={t.details.video}
         icon="video"
         value={draft.videoUrl ?? ''}
         onChangeText={(v) => onChange({ videoUrl: v || undefined }, 'video')}
@@ -187,8 +189,8 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
         keyboardType="url"
         autoCapitalize="none"
         autoCorrect={false}
-        error={videoError}
-        hint={videoError ? undefined : 'Optional: a reference video to learn from'}
+        error={videoError ? t.editor.badVideo : undefined}
+        hint={videoError ? undefined : t.details.videoHint}
         testID="field-video"
       />
     </Card>

@@ -1,8 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-/** Thrown by `update` when the change could not be saved; `message` is user-facing. */
-export class PersistError extends Error {}
+import { en } from './i18n/en';
+
+/**
+ * Thrown by `update` when the change could not be saved. Show `t.persist[err.reason]` to the user
+ * (`message` is the English text, for logs).
+ */
+export class PersistError extends Error {
+  readonly reason: 'unreadable' | 'writeFailed';
+  constructor(reason: 'unreadable' | 'writeFailed') {
+    super(en.persist[reason]);
+    this.reason = reason;
+  }
+}
 
 interface Options {
   /**
@@ -98,7 +109,7 @@ export function usePersistedValue<T>(key: string, initial: T, sanitize: (raw: un
             commit();
             return result;
           }
-          throw new PersistError('Your dances could not be read from this device, so nothing was saved. Please try again.');
+          throw new PersistError('unreadable');
         }
         if (optimistic) commit();
         try {
@@ -106,7 +117,7 @@ export function usePersistedValue<T>(key: string, initial: T, sanitize: (raw: un
         } catch (e) {
           console.warn(`Could not save "${key}"`, e);
           if (optimistic) return result;
-          throw new PersistError('Could not save on this device. Please try again.');
+          throw new PersistError('writeFailed');
         }
         if (!optimistic) commit();
         return result;

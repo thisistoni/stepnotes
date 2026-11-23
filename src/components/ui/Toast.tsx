@@ -4,6 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { resolveText, useT, type Localized } from '@/lib/i18n';
 import { colors, layout, motion, radius, withAlpha } from '@/lib/theme';
 
 import { Icon, type IconName } from '../Icon';
@@ -11,9 +12,10 @@ import { useReducedMotion } from './feedback';
 import { Text } from './Text';
 
 export interface ToastOptions {
-  message: string;
-  /** Optional action, e.g. `{ label: 'Undo', onPress: restore }` */
-  action?: { label: string; onPress: () => void };
+  /** Text, or `(t) => t.editor.saved` so a language switch while it shows re-translates it */
+  message: Localized;
+  /** Optional action, e.g. `{ label: (t) => t.common.undo, onPress: restore }` */
+  action?: { label: Localized; onPress: () => void };
   icon?: IconName;
   /** ms before it hides (default 3500, 6000 with an action) */
   duration?: number;
@@ -51,6 +53,11 @@ interface Current extends ToastOptions {
 export function ToastHost({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<Current | null>(null);
   const [insets, setInsets] = useState<{ id: number; px: number }[]>([]);
+  const t = useT();
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const inset = insets.length ? insets[insets.length - 1].px : 0;
   const seq = useRef(0);
   const regSeq = useRef(0);
@@ -63,7 +70,7 @@ export function ToastHost({ children }: { children: ReactNode }) {
   const show = useCallback((opts: ToastOptions) => {
     seq.current += 1;
     setCurrent({ ...opts, id: seq.current });
-    if (Platform.OS !== 'web') AccessibilityInfo.announceForAccessibility(opts.message);
+    if (Platform.OS !== 'web') AccessibilityInfo.announceForAccessibility(resolveText(opts.message, tRef.current));
   }, []);
   const hideNow = useCallback(() => setCurrent(null), []);
   const [hideSignal, setHideSignal] = useState(0);
@@ -80,6 +87,9 @@ export function ToastHost({ children }: { children: ReactNode }) {
 function ToastView({ toast, inset, hideSignal, onGone }: { toast: Current; inset: number; hideSignal: number; onGone: () => void }) {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
+  const t = useT();
+  const message = resolveText(toast.message, t);
+  const actionLabel = toast.action ? resolveText(toast.action.label, t) : '';
   const v = useSharedValue(0);
   const startSignal = useRef(hideSignal);
 
@@ -116,12 +126,12 @@ function ToastView({ toast, inset, hideSignal, onGone }: { toast: Current; inset
       >
         {toast.icon && <Icon name={toast.icon} size={20} color={colors.primaryLight} strokeWidth={2.6} />}
         <Text variant="small" color="onColor" style={s.msg} numberOfLines={3}>
-          {toast.message}
+          {message}
         </Text>
         {toast.action && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={toast.action.label}
+            accessibilityLabel={actionLabel}
             hitSlop={10}
             onPress={() => {
               toast.action!.onPress();
@@ -130,7 +140,7 @@ function ToastView({ toast, inset, hideSignal, onGone }: { toast: Current; inset
             style={({ pressed }) => [s.action, pressed && s.actionPressed]}
           >
             <Text variant="smallStrong" color="primaryLight">
-              {toast.action.label}
+              {actionLabel}
             </Text>
           </Pressable>
         )}

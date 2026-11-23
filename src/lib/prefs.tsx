@@ -4,9 +4,11 @@
  *   const { ready, prefs, set } = usePrefs();
  *   prefs.speed        // last used tempo multiplier (0.25–2, default 0.75)
  *   set({ loop: false })   // merge a patch; resolves when persisted
+ *   prefs.language     // 'de' | 'en' (see '@/lib/i18n')
  */
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
 
+import { DEFAULT_LANGUAGE, isLanguage, type Language } from './i18n/languages';
 import { usePersistedValue } from './persist';
 import type { Role } from './types';
 
@@ -24,6 +26,8 @@ export interface Prefs {
   speakCounts: boolean;
   /** Show L / R on the footprints */
   showLetters: boolean;
+  /** App language */
+  language: Language;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -34,6 +38,7 @@ export const DEFAULT_PREFS: Prefs = {
   haptics: true,
   speakCounts: false,
   showLetters: true,
+  language: DEFAULT_LANGUAGE,
 };
 
 export const SPEED_RANGE = [0.25, 2] as const;
@@ -47,6 +52,7 @@ export function sanitizePrefs(raw: unknown, base: Prefs = DEFAULT_PREFS): Prefs 
   const r = raw as Record<string, unknown>;
   for (const k of BOOL_KEYS) if (typeof r[k] === 'boolean') out[k] = r[k] as boolean;
   if (r.preferredRole === 'leader' || r.preferredRole === 'follower') out.preferredRole = r.preferredRole;
+  if (isLanguage(r.language)) out.language = r.language;
   if (typeof r.speed === 'number' && Number.isFinite(r.speed)) {
     out.speed = Math.min(SPEED_RANGE[1], Math.max(SPEED_RANGE[0], r.speed));
   }

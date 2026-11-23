@@ -1,7 +1,10 @@
 import { StyleSheet, View } from 'react-native';
 
 import { Button, IconButton, SegmentedProgress } from '@/components/ui';
-import { layout, space } from '@/lib/theme';
+import { useT } from '@/lib/i18n';
+import { space } from '@/lib/theme';
+
+import { LANGUAGE_TOGGLE_W, LanguageToggle } from './LanguageToggle';
 
 export interface IntroTopBarProps {
   /** 0-based step */
@@ -12,23 +15,24 @@ export interface IntroTopBarProps {
 }
 
 /**
- * Back arrow · segmented progress · Skip. The back slot keeps its width on the first step so the
- * bar never shifts between steps.
+ * DE | EN (welcome step) or back arrow · segmented progress · Skip. The left slot keeps its width
+ * on every step so the bar never shifts between steps.
  */
 export function IntroTopBar({ step, total, onBack, onSkip }: IntroTopBarProps) {
+  const t = useT();
   return (
     <View style={s.bar}>
       <View style={s.back}>
-        {step > 0 && <IconButton icon="back" label="Previous step" onPress={onBack} testID="intro-back" />}
+        {step === 0 ? <LanguageToggle /> : <IconButton icon="back" label={t.intro.previous} onPress={onBack} testID="intro-back" />}
       </View>
       <SegmentedProgress total={total} value={step + 1} />
       <Button
-        label="Skip"
+        label={t.intro.skip}
         variant="ghost"
         size="sm"
         inline
         onPress={onSkip}
-        accessibilityHint="Skips the intro and opens your dances"
+        accessibilityHint={t.intro.skipHint}
         testID="intro-skip"
         style={s.skip}
       />
@@ -45,8 +49,8 @@ const s = StyleSheet.create({
     paddingRight: space.s,
     paddingTop: space.s,
     paddingBottom: space.s,
-    minHeight: layout.minTap + space.l,
+    minHeight: 44 + space.l,
   },
-  back: { width: layout.minTap, height: layout.minTap + 4 },
+  back: { width: LANGUAGE_TOGGLE_W, height: 48, justifyContent: 'center' },
   skip: { alignSelf: 'center' },
 });

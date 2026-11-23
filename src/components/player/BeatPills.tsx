@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
 import { Text } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import type { BarRange } from '@/lib/pattern';
 import { colors, lip, type ColorSet } from '@/lib/theme';
 import type { Step } from '@/lib/types';
@@ -24,6 +25,7 @@ const BAR_GAP = 12;
  * view, so the count block never changes height.
  */
 export const BeatPills = memo(function BeatPills({ steps, bars, index, tone, onJump }: Props) {
+  const t = useT();
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const xs = useRef<number[]>([]);
   const view = useRef({ w: 0, content: 0 });
@@ -48,7 +50,7 @@ export const BeatPills = memo(function BeatPills({ steps, bars, index, tone, onJ
       contentContainerStyle={s.row}
       onLayout={(e: LayoutChangeEvent) => (view.current.w = e.nativeEvent.layout.width)}
       onContentSizeChange={(w) => (view.current.content = w)}
-      accessibilityLabel="Counts"
+      accessibilityLabel={t.count.pills}
       testID="beat-pills"
     >
       {bars.map((bar, bi) => (
@@ -69,7 +71,7 @@ export const BeatPills = memo(function BeatPills({ steps, bars, index, tone, onJ
                 onPress={() => onJump(i)}
                 hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Count ${st.count}, step ${i + 1}`}
+                accessibilityLabel={t.count.pill(st.count, i + 1)}
                 accessibilityState={{ selected: state === 'current' }}
                 aria-selected={state === 'current'}
                 testID={`pill-${i}`}
