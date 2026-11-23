@@ -264,6 +264,222 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
   return { feet, arrows, bounds };
 }
 
+// --- live (animated) layout --------------------------------------------------------------------
+
+/** Turns smaller than this (degrees) get no rotation cue. */
+export const TURN_MIN_DEG = 20;
+/** Radius of the round count badge on a live arrow (diagram units, before any px minimum). */
+export const LIVE_BADGE_R = 0.46;
+/** Distance from a foot's centre to its turn cue arc. */
+export const TURN_ARC_R = 1.75;
+
+export interface LiveArrow {
+  type: 'move' | 'inPlace';
+  a: Vec;
+  b: Vec;
+  /** centre of the count badge (on the arrow, at its midpoint) */
+  badge: Vec;
+  dashed: boolean;
+}
+
+export interface LiveStep {
+  index: number;
+  kind: 'step' | 'tap' | 'hold';
+  foot: Foot;
+  label: string;
+  /** position of the moving foot before / after the step (equal for holds) */
+  from: FootPos;
+  to: FootPos;
+  /** null for holds */
+  arrow: LiveArrow | null;
+  /** signed turn in degrees (positive = clockwise) when |turn| ≥ TURN_MIN_DEG, else 0 */
+  turn: number;
+}
+
+export interface LiveLayout {
+  /** every distinct foot position of the pattern (for the barely-visible context ghosts) */
+  positions: ChartFoot[];
+  steps: LiveStep[];
+  /** stable bounds for the whole pattern: feet, arrows, badges and turn cues, with padding */
+  bounds: Bounds;
+}
+
+/**
+ * Layout for the animated view. Unlike the printed chart, only the current step's arrow is ever
+ * drawn, so each arrow only has to avoid the feet that are on the floor during that step (the
+ * other foot, and the moving foot's origin and destination) instead of every position of the
+ * pattern. Arrows sit beside the path of the foot (outside of the body for forward/back moves,
+ * in front of the toes for side moves) so the travelling foot never covers its own arrow.
+ */
+export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
+  const steps: LiveStep[] = pattern.steps.map((step, i) => {
+    const before = states[i];
+    const after = states[i + 1];
+    const from = before.pos[step.foot];
+    const to = after.pos[step.foot];
+    const base = { index: i, kind: step.kind, foot: step.foot, label: step.count, from, to };
+    if (step.kind === 'hold') return { ...base, arrow: null, turn: 0 };
+
+    const other = footCapsule(before.pos[step.foot === 'L' ? 'R' : 'L']);
+    const own = [footCapsule(from), footCapsule(to)];
+    const clear = (a: Vec, b: Vec, min: number) => distSegSeg(a, b, other[0], other[1]) - FOOT_RADIUS > min;
+    const clearOwn = (a: Vec, b: Vec) => own.every(([c, d]) => distSegSeg(a, b, c, d) - FOOT_RADIUS > 0.08);
+    const dashed = step.kind === 'tap';
+    const d = shortestTurn(from.rot, to.rot);
+    const turn = Math.abs(d) >= TURN_MIN_DEG ? d : 0;
+    const outward = step.foot === 'L' ? -1 : 1;
+
+    if (samePos(from, to)) {
+      const seg = (side: number, off: number): [Vec, Vec] => [
+        { x: to.x + side * off, y: to.y - 0.75 },
+        { x: to.x + side * off, y: to.y + 0.75 },
+      ];
+      let s: [Vec, Vec] | null = null;
+      for (let k = 0; k < 5 && !s; k++) {
+        for (const side of [outward, -outward]) {
+          const c = seg(side, 0.95 + k * 0.45);
+          if (clear(c[0], c[1], 0.2)) {
+            s = c;
+            break;
+          }
+        }
+      }
+      s ??= seg(outward, 0.95);
+      const side = Math.sign(s[0].x - to.x) || outward;
+      // beside the short double arrow, never on it
+      const badge = placeBadge(s[0], s[1], { x: side, y: 0 }, [other, ...own], [[s[0], s[1]]]);
+      const arrow: LiveArrow = { type: 'inPlace', a: s[0], b: s[1], badge, dashed };
+      return { ...base, arrow, turn };
+    }
+
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy);
+    const u = { x: dx / len, y: dy / len };
+    const n = { x: -u.y, y: u.x };
+    // preferred side: away from the body for forward/back moves, in front of the toes for side moves
+    const vertical = Math.abs(u.y) >= Math.abs(u.x);
+    const pref = vertical ? (Math.sign(n.x) || 1) * outward : n.y < 0 ? 1 : -1;
+    const sideways = Math.abs(n.x) * 0.5 + Math.abs(n.y) * 1.3 + 0.38;
+    const shrink = Math.min(0.35, len * 0.15);
+    const segFor = (off: number): [Vec, Vec] => [
+      { x: from.x + u.x * shrink + n.x * off, y: from.y + u.y * shrink + n.y * off },
+      { x: to.x - u.x * shrink + n.x * off, y: to.y - u.y * shrink + n.y * off },
+    ];
+    let s: [Vec, Vec] | null = null;
+    let used = pref;
+    for (let k = 0; k < 6 && !s; k++) {
+      for (const side of [pref, -pref]) {
+        const c = segFor(side * (sideways + k * 0.45));
+        if (clear(c[0], c[1], 0.25) && clearOwn(c[0], c[1])) {
+          s = c;
+          used = side;
+          break;
+        }
+      }
+    }
+    s ??= segFor(pref * sideways);
+    // the badge never covers a foot: not the other one, nor the moving foot anywhere on its way;
+    // a short arrow would also vanish under it, so then it must sit beyond the arrow
+    const path = footSweep(from, to);
+    const arrowLen = Math.hypot(s[1].x - s[0].x, s[1].y - s[0].y);
+    const outV = { x: n.x * used, y: n.y * used };
+    const obstacles: [Vec, Vec][] = [other, ...own, ...path];
+    const badge = placeBadge(s[0], s[1], outV, obstacles, arrowLen < LIVE_BADGE_R * 2 + 1.2 ? [[s[0], s[1]]] : []);
+    const arrow: LiveArrow = { type: 'move', a: s[0], b: s[1], badge, dashed };
+    return { ...base, arrow, turn };
+  });
+
+  const positions = collectFeet(pattern, states);
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const addFoot = (p: FootPos) => {
+    for (const q of footCapsule(p)) {
+      xs.push(q.x - 0.62, q.x + 0.62);
+      ys.push(q.y - 0.62, q.y + 0.62);
+    }
+  };
+  positions.forEach((f) => addFoot(f.pos));
+  steps.forEach((st) => {
+    if (st.arrow) {
+      xs.push(st.arrow.a.x, st.arrow.b.x, st.arrow.badge.x - LIVE_BADGE_R - 0.1, st.arrow.badge.x + LIVE_BADGE_R + 0.1);
+      ys.push(st.arrow.a.y, st.arrow.b.y, st.arrow.badge.y - LIVE_BADGE_R - 0.1, st.arrow.badge.y + LIVE_BADGE_R + 0.1);
+    }
+    if (st.turn) {
+      const r = TURN_ARC_R + 0.35;
+      xs.push(st.to.x - r, st.to.x + r);
+      ys.push(st.to.y - r, st.to.y + r);
+    }
+  });
+  const m = 0.55;
+  const bounds = growTo({ minX: Math.min(...xs) - m, maxX: Math.max(...xs) + m, minY: Math.min(...ys) - m, maxY: Math.max(...ys) + m }, 6);
+  return { positions, steps, bounds };
+}
+
+/**
+ * Where to put a live count badge: beside its arrow, never on a foot. Candidates slide along the
+ * arrow and step outwards (away from the foot's path) until the badge clears the moving foot's
+ * whole travel (origin → destination), the other foot, and every other obstacle given.
+ */
+function placeBadge(a: Vec, b: Vec, out: Vec, obstacles: [Vec, Vec][], lines: [Vec, Vec][] = []): Vec {
+  const r = LIVE_BADGE_R + 0.12;
+  const clearOf = (c: Vec) =>
+    Math.min(
+      ...obstacles.map(([p, q]) => distPointSeg(c, p, q) - FOOT_RADIUS - r),
+      ...lines.map(([p, q]) => distPointSeg(c, p, q) - 0.12 - r),
+    );
+  let best = mid(a, b);
+  let bestScore = -Infinity;
+  for (const extra of [0, 0.25, 0.5, 0.8, 1.1, 1.45]) {
+    for (const t of [0.5, 0.4, 0.6, 0.3, 0.7]) {
+      const c = { x: a.x + (b.x - a.x) * t + out.x * extra, y: a.y + (b.y - a.y) * t + out.y * extra };
+      const sc = clearOf(c);
+      if (sc > 0.04) return c;
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = c;
+      }
+    }
+  }
+  return best;
+}
+
+function mid(a: Vec, b: Vec): Vec {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+/** Capsules covering a foot travelling from `a` to `b` (both ends plus the swept path). */
+function footSweep(a: FootPos, b: FootPos): [Vec, Vec][] {
+  const ca = footCapsule(a);
+  const cb = footCapsule(b);
+  return [
+    [ca[0], cb[0]],
+    [ca[1], cb[1]],
+    [
+      { x: a.x, y: a.y },
+      { x: b.x, y: b.y },
+    ],
+  ];
+}
+
+function shortestTurn(from: number, to: number) {
+  let d = (to - from) % 360;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  return d;
+}
+
+/** Smallest box containing all of the given bounds (e.g. one zoom for every per-bar chart). */
+export function unionBounds(list: Bounds[]): Bounds | null {
+  if (list.length === 0) return null;
+  return {
+    minX: Math.min(...list.map((b) => b.minX)),
+    minY: Math.min(...list.map((b) => b.minY)),
+    maxX: Math.max(...list.map((b) => b.maxX)),
+    maxY: Math.max(...list.map((b) => b.maxY)),
+  };
+}
+
 export function growTo(b: Bounds, minSize: number): Bounds {
   const grow = (lo: number, hi: number): [number, number] => {
     const size = hi - lo;

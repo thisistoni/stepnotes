@@ -71,7 +71,14 @@ interface Props {
   ghostFill?: string;
   /** Dashed outline width (default STICKER.ghostWidth) */
   ghostWidth?: number;
+  /** Letter size in diagram units (default 0.62); raise it on small diagrams so L / R stay legible */
+  letterSize?: number;
+  /** Text drawn inside an OUTLINE foot (e.g. the next step's count), in `letterColor` */
+  outlineLabel?: string;
 }
+
+/** Default L / R letter size (diagram units). */
+export const LETTER_SIZE = 0.62;
 
 const ORIGIN: FootPos = { x: 0, y: 0, rot: 0 };
 
@@ -93,6 +100,8 @@ export const FootShape = memo(function FootShape({
   strokeWidth = STICKER.outline,
   ghostFill,
   ghostWidth = STICKER.ghostWidth,
+  letterSize = LETTER_SIZE,
+  outlineLabel,
 }: Props) {
   const flip = foot === 'R' ? -1 : 1;
   const d = style === 'shoe' ? SHOE_PATH : HEEL_PATH;
@@ -112,6 +121,11 @@ export const FootShape = memo(function FootShape({
             strokeLinejoin="round"
           />
         </G>
+        {!!outlineLabel && letterColor && (
+          <SvgText x={0} y={-0.42 + letterSize * 0.36} fontSize={letterSize} fontFamily={SVG_FONT_MEDIUM} fill={letterColor} textAnchor="middle">
+            {outlineLabel}
+          </SvgText>
+        )}
       </G>
     );
   }
@@ -129,7 +143,7 @@ export const FootShape = memo(function FootShape({
           <Path d={d} fill={color} stroke={stroke ?? 'none'} strokeWidth={sw} strokeLinejoin="round" />
         </G>
         {showLetter && letterColor && (
-          <SvgText x={0} y={-0.26} fontSize={0.62} fontFamily={SVG_FONT} fill={letterColor} textAnchor="middle">
+          <SvgText x={0} y={-0.48 + letterSize * 0.36} fontSize={letterSize} fontFamily={SVG_FONT} fill={letterColor} textAnchor="middle">
             {foot}
           </SvgText>
         )}

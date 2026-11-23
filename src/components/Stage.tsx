@@ -58,7 +58,7 @@ export function Stage({
         </Defs>
         <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id})`} />
       </Svg>
-      <View style={[s.content, { paddingTop: top, padding }]} onLayout={onLayout}>
+      <View style={[s.content, { padding, paddingTop: top }]} onLayout={onLayout}>
         {typeof children === 'function'
           ? area && children({ width: area.width - padding * 2, height: area.height - top - padding })
           : children}
