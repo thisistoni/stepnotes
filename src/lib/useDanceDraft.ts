@@ -3,10 +3,11 @@
  *
  *   const d = useDanceDraft(initial);
  *   d.draft, d.role, d.sel (-1 = start position), d.startFoot, d.canUndo, d.dirty
- *   d.addStep(), d.updateStep(i, patch, group?), d.beginDrag(foot) / d.dragTo(x, y) / d.endDrag(), d.undo() …
+ *   d.addStep(), d.updateStep(i, patch, group?), d.beginDrag(foot) / d.dragTo(x, y) / d.dragRotate(foot, rot) / d.endDrag(), d.undo() …
  *
  * Every mutation is undoable and restores the selection that went with it. Rules:
  *   - A drag is ONE undo entry (pushed on the first real move; a grab without a move adds none).
+ *     A hold-to-rotate gesture is a drag too: `beginDrag` → `dragRotate(foot, rot)`… → `endDrag`.
  *   - Typing is coalesced: consecutive edits with the same `group` (e.g. 'name') are one entry
  *     until `seal()` (field blur) or any other action.
  *   - `dirty` = the draft differs from what was loaded (undoing everything clears it).
@@ -47,6 +48,7 @@ type Action =
   | { type: 'startFoot'; foot: Foot }
   | { type: 'dragStart'; foot: Foot }
   | { type: 'dragMove'; foot: Foot; x: number; y: number }
+  | { type: 'dragRotate'; foot: Foot; rot: number }
   | { type: 'dragEnd' }
   | { type: 'undo' }
   | { type: 'seal' };
@@ -54,8 +56,45 @@ type Action =
 const snap = (s: DraftState): Snapshot => ({ draft: s.draft, role: s.role, sel: s.sel, startFoot: s.startFoot });
 const push = (past: Snapshot[], s: Snapshot) => (past.length >= MAX_UNDO ? [...past.slice(1), s] : [...past, s]);
 
+const normRot = (r: number) => {
+  let d = r % 360;
+  if (d > 180) d -= 360;
+  if (d <= -180) d += 360;
+  return d === 0 ? 0 : d;
+};
+
 function withPattern(d: Dance, role: Role, p: Pattern): Dance {
   return { ...d, roles: { ...d.roles, [role]: p } };
+}
+
+/**
+ * One move of a drag gesture: change the edited foot (start position or the selected step's
+ * moving foot). The first real change pushes the snapshot taken at `dragStart`.
+ */
+function dragFoot(state: DraftState, foot: Foot, change: (old: FootPos) => FootPos): DraftState {
+  const p = state.draft.roles[state.role];
+  if (!p || !state.dragging) return state;
+  const i = state.sel[state.role];
+  let np: Pattern;
+  if (i < 0) {
+    const old = p.start[foot];
+    const pos = change(old);
+    if (pos === old) return state;
+    np = { ...p, start: { ...p.start, [foot]: pos } };
+  } else {
+    const st = p.steps[i];
+    if (!st || st.kind === 'hold' || st.foot !== foot) return state;
+    const pos = change(st.to);
+    if (pos === st.to) return state;
+    np = { ...p, steps: p.steps.map((s, k) => (k === i ? { ...s, to: pos } : s)) };
+  }
+  return {
+    ...state,
+    draft: withPattern(state.draft, state.role, np),
+    past: state.pending ? push(state.past, state.pending) : state.past,
+    rev: state.rev + 1,
+    pending: null,
+  };
 }
 
 function reducer(state: DraftState, a: Action): DraftState {
@@ -86,28 +125,11 @@ function reducer(state: DraftState, a: Action): DraftState {
       const base = atStart ? { ...state, startFoot: a.foot } : state;
       return { ...base, pending: snap(state), dragging: true, group: null };
     }
-    case 'dragMove': {
-      const p = state.draft.roles[state.role];
-      if (!p || !state.dragging) return state;
-      const i = state.sel[state.role];
-      let np: Pattern;
-      if (i < 0) {
-        const old = p.start[a.foot];
-        if (old.x === a.x && old.y === a.y) return state;
-        np = { ...p, start: { ...p.start, [a.foot]: { x: a.x, y: a.y, rot: old.rot } } };
-      } else {
-        const st = p.steps[i];
-        if (!st || st.kind === 'hold' || st.foot !== a.foot) return state;
-        if (st.to.x === a.x && st.to.y === a.y) return state;
-        np = { ...p, steps: p.steps.map((s, k) => (k === i ? { ...s, to: { x: a.x, y: a.y, rot: s.to.rot } } : s)) };
-      }
-      return {
-        ...state,
-        draft: withPattern(state.draft, state.role, np),
-        past: state.pending ? push(state.past, state.pending) : state.past,
-        rev: state.rev + 1,
-        pending: null,
-      };
+    case 'dragMove':
+      return dragFoot(state, a.foot, (o) => (o.x === a.x && o.y === a.y ? o : { x: a.x, y: a.y, rot: o.rot }));
+    case 'dragRotate': {
+      const rot = normRot(a.rot);
+      return dragFoot(state, a.foot, (o) => (o.rot === rot ? o : { ...o, rot }));
     }
     case 'dragEnd':
       return state.dragging || state.pending ? { ...state, dragging: false, pending: null } : state;
@@ -135,13 +157,6 @@ function init(initial: Dance): DraftState {
     dragging: false,
   };
 }
-
-const normRot = (r: number) => {
-  let d = r % 360;
-  if (d > 180) d -= 360;
-  if (d <= -180) d += 360;
-  return d === 0 ? 0 : d;
-};
 
 export function useDanceDraft(initial: Dance) {
   const [state, dispatch] = useReducer(reducer, initial, init);
@@ -175,6 +190,8 @@ export function useDanceDraft(initial: Dance) {
 
       beginDrag: (foot: Foot) => dispatch({ type: 'dragStart', foot }),
       dragTo: (foot: Foot, x: number, y: number) => dispatch({ type: 'dragMove', foot, x, y }),
+      /** During a drag gesture: turn the grabbed foot to `rot` degrees (hold-to-rotate). */
+      dragRotate: (foot: Foot, rot: number) => dispatch({ type: 'dragRotate', foot, rot }),
       endDrag: () => dispatch({ type: 'dragEnd' }),
 
       /** Name, style, bpm… `group` coalesces typing into one undo entry. */

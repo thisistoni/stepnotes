@@ -37,6 +37,66 @@ export function fitBounds(p: Pattern, aspect: number): Bounds {
   return { minX, minY, maxX, maxY };
 }
 
+/** The same view moved by (dx, dy) diagram units. */
+export function shiftBounds(b: Bounds, dx: number, dy: number): Bounds {
+  return { minX: b.minX + dx, maxX: b.maxX + dx, minY: b.minY + dy, maxY: b.maxY + dy };
+}
+
+/** A view of the size of `size` centred where `b` is centred (keeps a panned view across resizes). */
+export function recenterSize(b: Bounds, size: Bounds): Bounds {
+  const cx = (b.minX + b.maxX) / 2;
+  const cy = (b.minY + b.maxY) / 2;
+  const hw = (size.maxX - size.minX) / 2;
+  const hh = (size.maxY - size.minY) / 2;
+  return { minX: cx - hw, maxX: cx + hw, minY: cy - hh, maxY: cy + hh };
+}
+
+/**
+ * Shift the view as little as possible so every point lies at least `margin` inside it (centred
+ * on the points when they do not fit). Never zooms. Used to keep the foot being edited reachable.
+ */
+export function keepInView(b: Bounds, pts: readonly { x: number; y: number }[], margin: number): Bounds {
+  if (!pts.length) return b;
+  const axis = (lo: number, hi: number, pmin: number, pmax: number) => {
+    const size = hi - lo;
+    const minLo = pmax + margin - size; // smallest `lo` that still shows pmax
+    const maxLo = pmin - margin; // largest `lo` that still shows pmin
+    if (minLo > maxLo) return (pmin + pmax) / 2 - size / 2 - lo;
+    if (lo < minLo) return minLo - lo;
+    if (lo > maxLo) return maxLo - lo;
+    return 0;
+  };
+  const xs = pts.map((q) => q.x);
+  const ys = pts.map((q) => q.y);
+  const dx = axis(b.minX, b.maxX, Math.min(...xs), Math.max(...xs));
+  const dy = axis(b.minY, b.maxY, Math.min(...ys), Math.max(...ys));
+  return dx || dy ? shiftBounds(b, dx, dy) : b;
+}
+
+export function sameBounds(a: Bounds, b: Bounds) {
+  return Math.abs(a.minX - b.minX) < 1e-6 && Math.abs(a.maxX - b.maxX) < 1e-6 && Math.abs(a.minY - b.minY) < 1e-6 && Math.abs(a.maxY - b.maxY) < 1e-6;
+}
+
+/** Is the point inside the view, `margin` from its edges? */
+export function inView(b: Bounds, x: number, y: number, margin: number) {
+  return x >= b.minX + margin && x <= b.maxX - margin && y >= b.minY + margin && y <= b.maxY - margin;
+}
+
+/** Rotation steps of the hold-to-rotate gesture (same as the ±15° buttons). */
+export const ROT_SNAP = 15;
+
+/**
+ * Foot rotation (degrees, 0 = toes up the screen, clockwise positive, in (-180, 180]) that points
+ * the toes along (dx, dy), snapped to ROT_SNAP.
+ */
+export function rotTowards(dx: number, dy: number): number {
+  const deg = (Math.atan2(dx, -dy) * 180) / Math.PI;
+  let r = Math.round(deg / ROT_SNAP) * ROT_SNAP;
+  if (r <= -180) r += 360;
+  if (r > 180) r -= 360;
+  return r + 0; // no -0
+}
+
 /** Do the current bounds still fit the pattern comfortably (and the canvas shape)? */
 export function boundsStillFit(b: Bounds, p: Pattern, aspect: number): boolean {
   const ba = (b.maxX - b.minX) / (b.maxY - b.minY);

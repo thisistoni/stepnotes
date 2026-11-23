@@ -302,6 +302,8 @@ export const en = {
     keepEditing: 'Keep editing',
     rotateLeft: 'Rotate foot 15 degrees left',
     rotateRight: 'Rotate foot 15 degrees right',
+    /** Crosshair button on the canvas after panning */
+    recenter: 'Show all steps',
   },
 
   details: {
@@ -386,11 +388,20 @@ export const en = {
     startDragging: (foot: Foot) => `Let go where the ${FOOT[foot].toLowerCase()} foot starts.`,
     startEmpty: 'Drag the feet into place, then add step 1.',
     startChange: 'Drag either foot to change the start.',
-    holdBlocked: 'Holds can’t move. Switch to Step to place a foot.',
+    holdBlocked: 'Holds can’t move. Switch to Step to move a foot.',
     hold: 'A hold: nobody moves on this count.',
     dragging: (foot: Foot) => `Let go where the ${FOOT[foot].toLowerCase()} foot lands.`,
-    tap: (foot: Foot) => `Drag the ${FOOT[foot].toLowerCase()} foot, or tap where it touches.`,
-    step: (foot: Foot) => `Drag the ${FOOT[foot].toLowerCase()} foot, or tap where it lands.`,
+    tap: (foot: Foot) => `Drag the ${FOOT[foot].toLowerCase()} foot to where it touches.`,
+    step: (foot: Foot) => `Drag the ${FOOT[foot].toLowerCase()} foot to where it lands.`,
+    /** Hold-to-rotate is active */
+    rotating: 'The toes point to your finger. Let go to keep the angle.',
+    /** The finger pans the canvas */
+    panning: 'The crosshair brings all steps back.',
+    /** Gesture tips on the canvas (each until the user has used it) */
+    holdTip: 'Hold a foot to turn it',
+    panTip: 'Drag the floor to move the view',
+    /** Tip after a foot was dragged against the edge of the canvas */
+    edgeTip: 'More room? Drag the floor',
   },
 
   import: {

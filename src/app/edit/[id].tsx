@@ -10,7 +10,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 
 import { CoachHint, coachHint } from '@/components/editor/CoachHint';
 import { DetailsCard } from '@/components/editor/DetailsCard';
-import { EditorCanvas, RotateTray } from '@/components/editor/EditorCanvas';
+import { EditorCanvas, RotateTray, type CanvasMode } from '@/components/editor/EditorCanvas';
 import { EditorTopBar } from '@/components/editor/EditorTopBar';
 import { FollowerSetupCard, FollowerToolsCard } from '@/components/editor/FollowerCards';
 import { Inspector } from '@/components/editor/Inspector';
@@ -90,6 +90,7 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
   const [videoError, setVideoError] = useState(false);
   const [pressing, setPressing] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [canvasMode, setCanvasMode] = useState<CanvasMode>(null);
   const [saving, setSaving] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const { scrollRef, contentRef, onScroll, onLayout, onContentLayout, reveal: revealField } = useRevealScroll();
@@ -209,7 +210,7 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
   // Canvas + step strip fit on one phone screen together (with the details collapsed).
   const canvasH = Math.round(Math.min(380, Math.max(200, winH - 470)));
   const tone = styleColor(draft.style);
-  const hint = coachHint({ sel, step, stepCount: pattern?.steps.length ?? 0, startFoot, dragging: d.dragging, blocked }, t);
+  const hint = coachHint({ sel, step, stepCount: pattern?.steps.length ?? 0, startFoot, dragging: d.dragging, canvasMode, blocked }, t);
   const roleOptions = (['leader', 'follower'] as Role[]).map((r) => ({
     value: r,
     label: t.roles[r],
@@ -280,9 +281,11 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
                     height={canvasH}
                     onDragStart={d.beginDrag}
                     onDragMove={d.dragTo}
+                    onDragRotate={d.dragRotate}
                     onDragEnd={d.endDrag}
                     onBlockedTouch={() => setBlocked(true)}
                     onPressChange={setPressing}
+                    onModeChange={setCanvasMode}
                   />
                   <View style={s.hintRow}>
                     <CoachHint text={hint} role={role} />
