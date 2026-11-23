@@ -40,6 +40,12 @@
         }
       ]
     ],
-    "scheme": "stepnotes"
+    "scheme": "stepnotes",
+    "extra": {
+      "eas": {
+        "projectId": "22c12283-e8e2-4df1-ba49-79da1fc50e21"
+      }
+    },
+    "owner": "thisistoni"
   }
 }
