@@ -21,6 +21,40 @@ export function shortestAngleDelta(from: number, to: number) {
   return d;
 }
 
+/** Angle normalised to (-180, 180]. */
+export function normAngle(r: number) {
+  let d = r % 360;
+  if (d > 180) d -= 360;
+  if (d <= -180) d += 360;
+  return d === 0 ? 0 : d;
+}
+
+/** The step's pivot (swivel of the weight-bearing foot) in degrees; 0 when there is none. */
+export const stepPivot = (s: Pick<Step, 'pivot' | 'kind'>) =>
+  s.kind !== 'hold' && typeof s.pivot === 'number' && Number.isFinite(s.pivot) ? s.pivot : 0;
+
+/**
+ * Signed rotation of the MOVING foot during a step: the short way round, except that a half turn
+ * (180°) goes the way the step's pivot turns (a spin to the left is not drawn as one to the right).
+ */
+export function stepTurn(step: Pick<Step, 'pivot' | 'kind' | 'to'>, fromRot: number) {
+  const d = shortestAngleDelta(fromRot, step.to.rot);
+  const p = stepPivot(step);
+  return Math.abs(d) >= 179.5 && p !== 0 ? 180 * Math.sign(p) : d;
+}
+
+/**
+ * Which way the dancer faces in a position, in degrees (0 = up the screen, positive = clockwise):
+ * where the foot carrying the weight points (after a New Yorker's turn back, the free foot may still
+ * point the old way), or halfway between the feet when the weight is on both. Used to say "forward"
+ * relative to the body after a turn, and for the stage's facing arrow.
+ */
+export function facingOf(state: FeetState) {
+  const { pos, weight } = state;
+  if (weight) return normAngle(pos[weight].rot);
+  return normAngle(pos.L.rot + shortestAngleDelta(pos.L.rot, pos.R.rot) / 2);
+}
+
 /** Length of a step in beats; anything invalid counts as one beat. */
 export const stepBeats = (s: Pick<Step, 'beats'>) => (Number.isFinite(s.beats) && s.beats > 0 ? s.beats : 1);
 
@@ -46,8 +80,12 @@ export function computeStates(pattern: Pattern): FeetState[] {
       states.push(prev);
       continue;
     }
+    // a pivot swivels the weight-bearing foot on the spot
+    const other = otherFoot(step.foot);
+    const pivot = stepPivot(step);
+    const otherPos = pivot ? { ...prev.pos[other], rot: normAngle(prev.pos[other].rot + pivot) } : prev.pos[other];
     states.push({
-      pos: { ...prev.pos, [step.foot]: step.to },
+      pos: { ...prev.pos, [step.foot]: step.to, [other]: otherPos } as Record<Foot, FootPos>,
       // a tap never takes the weight: from the start position (weight on both) it moves to the other foot
       weight: step.kind === 'step' ? step.foot : (prev.weight ?? otherFoot(step.foot)),
     });
@@ -105,8 +143,13 @@ export function frameAt(pattern: Pattern, states: FeetState[], beat: number): Fr
       x: lerp(from.x, to.x, t),
       y: lerp(from.y, to.y, t),
       // turn the short way round (e.g. 170° -> -170° is a 20° turn, not 340°)
-      rot: from.rot + shortestAngleDelta(from.rot, to.rot) * t,
+      rot: from.rot + stepTurn(step, from.rot) * t,
     };
+    const pivot = stepPivot(step);
+    if (pivot) {
+      const o = otherFoot(step.foot);
+      feet[o] = { ...before.pos[o], rot: before.pos[o].rot + pivot * t };
+    }
   }
   return { index: i, feet, weight: t > 0.5 ? after.weight : before.weight, progress: t };
 }
@@ -116,6 +159,7 @@ export function frameAt(pattern: Pattern, states: FeetState[], beat: number): Fr
  * in closed position: the partner's right foot mirrors my left, and my "forward" is their "back".
  */
 export function toPartner(pattern: Pattern): Pattern {
+  // a half turn of the whole frame keeps the sense of rotation: rotations and pivots stay as they are
   const flip = (p: FootPos): FootPos => ({ x: -p.x, y: -p.y, rot: p.rot });
   return {
     start: { L: flip(pattern.start.R), R: flip(pattern.start.L) },
@@ -128,12 +172,16 @@ export function toPartner(pattern: Pattern): Pattern {
   };
 }
 
-/** Mirror left/right (e.g. to practise facing a mirror or a teacher). */
+/** Mirror left/right (e.g. to practise facing a mirror or a teacher). Turns change direction. */
 export function mirrorPattern(pattern: Pattern): Pattern {
-  const flip = (p: FootPos): FootPos => ({ x: -p.x, y: p.y, rot: -p.rot });
+  const flip = (p: FootPos): FootPos => ({ x: -p.x, y: p.y, rot: normAngle(-p.rot) });
   return {
     start: { L: flip(pattern.start.R), R: flip(pattern.start.L) },
-    steps: pattern.steps.map((s) => ({ ...s, foot: otherFoot(s.foot), to: flip(s.to) })),
+    steps: pattern.steps.map((s) => {
+      const out: Step = { ...s, foot: otherFoot(s.foot), to: flip(s.to) };
+      if (s.pivot) out.pivot = -s.pivot;
+      return out;
+    }),
   };
 }
 
@@ -145,32 +193,57 @@ export interface StepDirection {
 
 /**
  * What a step does, as data: the dictionaries turn this into a sentence in their own word order
- * (`t.step.describe`). `turn` is the signed rotation in degrees (positive = right), 0 below 10°.
+ * (`t.step.describe`). `turn` is the signed rotation in degrees (positive = right), 0 below 10°:
+ * the moving foot's turn, or the pivot of the weight-bearing foot when the moving foot does not turn.
  *   inPlace – the foot stays where it is · close – it ends next to the other foot · move – anything else
+ * Directions are relative to the dancer, not to the screen: forward is where the body faces while
+ * the foot moves. After a turn of the body (a pivot, or the foot itself turning by 60° or more)
+ * that is the new facing; otherwise the facing before the step, so a toe-out step forward still
+ * reads "forward".
  */
 export type StepInfo =
   | { kind: 'hold' }
   | { kind: 'step' | 'tap'; foot: Foot; motion: 'inPlace' | 'close' | 'move'; dir: StepDirection; turn: number };
 
+/** (dx, dy) seen by a dancer facing `facing` degrees: x = to their right, y = backwards. */
+function toBody(dx: number, dy: number, facing: number) {
+  const r = (facing * Math.PI) / 180;
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  return { x: dx * c + dy * s, y: -dx * s + dy * c };
+}
+
 export function analyzeStep(step: Step, before: FeetState): StepInfo {
   if (step.kind === 'hold') return { kind: 'hold' };
   const from = before.pos[step.foot];
-  const dx = step.to.x - from.x;
-  const dy = step.to.y - from.y;
-  const rawTurn = Math.round(shortestAngleDelta(from.rot, step.to.rot));
+  const footTurn = Math.round(stepTurn(step, from.rot));
+  const pivot = Math.round(stepPivot(step));
+  const rawTurn = Math.abs(footTurn) >= 10 ? footTurn : pivot;
   const turn = Math.abs(rawTurn) >= 10 ? rawTurn : 0;
   const base = { kind: step.kind, foot: step.foot, turn };
-  if (Math.hypot(dx, dy) < 0.3) return { ...base, motion: 'inPlace', dir: { fb: null, side: null } };
+  if (Math.hypot(step.to.x - from.x, step.to.y - from.y) < 0.3) return { ...base, motion: 'inPlace', dir: { fb: null, side: null } };
 
+  const bodyTurned = Math.abs(pivot) >= 10 || Math.abs(footTurn) >= 60;
+  const facing = bodyTurned ? step.to.rot : facingOf(before);
+  const { x: dx, y: dy } = toBody(step.to.x - from.x, step.to.y - from.y, facing);
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
   const fb = dy < 0 ? 'forward' : 'back';
   const side = dx < 0 ? 'left' : 'right';
-  const dir: StepDirection = ay > ax * 3.5 ? { fb, side: null } : ax > ay * 3.5 ? { fb: null, side } : { fb, side };
-
-  // Is the foot closing next to the other foot?
+  // Where it lands next to the weight-bearing foot, as the dancer sees it
   const other = before.pos[otherFoot(step.foot)];
-  const closing = Math.abs(step.to.y - other.y) < 0.5 && Math.abs(step.to.x - other.x) < 1.6;
+  const rel = toBody(step.to.x - other.x, step.to.y - other.y, facing);
+  const closing = Math.abs(rel.y) < 0.5 && Math.abs(rel.x) < 1.6;
+  // landing level with the other foot, away from it, is a side step (the box's "side" after a
+  // forward step, the chassé's first step after a rock step), even if the foot also came forward
+  const level = Math.abs(rel.y) < 0.6 && Math.abs(rel.x) >= 1.6 && Math.sign(rel.x) === Math.sign(dx) && ax > 0.5;
+  const dir: StepDirection = level
+    ? { fb: null, side }
+    : ay > ax * 3.5
+      ? { fb, side: null }
+      : ax > ay * 3.5
+        ? { fb: null, side }
+        : { fb, side };
   return { ...base, motion: closing ? 'close' : 'move', dir };
 }
 
@@ -277,8 +350,10 @@ export function buildTimeline(pattern: Pattern, states: FeetState[] = computeSta
       const before = st[i];
       const after = st[i + 1];
       const moving = step.kind !== 'hold' && step.foot === f;
+      // the weight-bearing foot only changes during a step when it pivots (swivels on the spot)
+      const pivot = moving ? 0 : stepPivot(step);
       t.m.push(moving ? 1 : 0);
-      const from = moving ? before.pos[f] : after.pos[f];
+      const from = moving || pivot ? before.pos[f] : after.pos[f];
       const to = after.pos[f];
       t.b0.push(starts[i]);
       t.b1.push(starts[i] + durations[i] * MOVE_FRACTION);
@@ -287,7 +362,7 @@ export function buildTimeline(pattern: Pattern, states: FeetState[] = computeSta
       t.r0.push(from.rot);
       t.x1.push(to.x);
       t.y1.push(to.y);
-      t.r1.push(from.rot + shortestAngleDelta(from.rot, to.rot));
+      t.r1.push(from.rot + (moving ? stepTurn(step, from.rot) : pivot || shortestAngleDelta(from.rot, to.rot)));
       t.w0.push(solidness(before, f));
       t.w1.push(solidness(after, f));
     });

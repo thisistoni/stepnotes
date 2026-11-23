@@ -41,7 +41,6 @@ import {
   LABEL_SIZE,
   LIVE_BADGE_R,
   TURN_ARC_R,
-  TURN_MIN_DEG,
   type Bounds,
   type ChartArrow,
   type ChartLayout,
@@ -57,7 +56,6 @@ import {
   footPoseAt,
   KIND_CODE,
   samePos,
-  shortestAngleDelta,
   stepIndexAt,
   type Frame,
   type Timeline,
@@ -179,7 +177,7 @@ export const StepDiagram = memo(function StepDiagram({
   const states = useMemo(() => computeStates(layoutPattern), [layoutPattern]);
   // the printed-chart layout (arrow / label placement) is only needed for the chart
   const layout = useMemo(
-    () => (mode === 'overview' ? layoutChart(layoutPattern, states) : { feet: [], arrows: [], bounds: EMPTY_BOUNDS }),
+    () => (mode === 'overview' ? layoutChart(layoutPattern, states) : { feet: [], arrows: [], turns: [], bounds: EMPTY_BOUNDS }),
     [mode, layoutPattern, states],
   );
   // live layout: cheap, so a fixed pose (the editor dragging a foot) uses the CURRENT pattern and
@@ -187,17 +185,6 @@ export const StepDiagram = memo(function StepDiagram({
   const livePattern = animated ? layoutPattern : pattern;
   const live = useMemo(() => (mode === 'live' ? layoutLive(livePattern, computeStates(livePattern)) : null), [mode, livePattern]);
   const timeline = useMemo(() => (beat ? buildTimeline(pattern) : null), [beat, pattern]);
-  const turns = useMemo(
-    () =>
-      mode === 'overview'
-        ? layoutPattern.steps
-            .map((s, i) => ({ s, from: states[i].pos[s.foot] }))
-            .filter(({ s }) => s.kind !== 'hold')
-            .map(({ s, from }) => ({ to: s.to, turn: shortestAngleDelta(from.rot, s.to.rot) }))
-            .filter((t) => Math.abs(t.turn) >= TURN_MIN_DEG)
-        : [],
-    [mode, layoutPattern, states],
-  );
 
   const bounds = fixedBounds ?? live?.bounds ?? layout.bounds;
   const vbW = bounds.maxX - bounds.minX;
@@ -302,7 +289,7 @@ export const StepDiagram = memo(function StepDiagram({
         showLabels={labelsVisible}
         letterSize={letterSize}
         unit={unit}
-        turns={turns}
+        turns={layout.turns}
       />
       {mode === 'live' &&
         (beat && timeline && live ? (
@@ -358,7 +345,7 @@ interface StaticLayerProps {
   showLabels: boolean;
   letterSize: number;
   unit: number;
-  turns: { to: FootPos; turn: number }[];
+  turns: { at: FootPos; turn: number }[];
 }
 
 const StaticLayer = memo(function StaticLayer({
@@ -404,7 +391,7 @@ const StaticLayer = memo(function StaticLayer({
             />
           ))}
           {turns.map((t, i) => (
-            <TurnCue key={`t${i}`} at={t.to} turn={t.turn} color={theme.activeArrow} width={Math.max(0.08, 1.8 * unit)} />
+            <TurnCue key={`t${i}`} at={t.at} turn={t.turn} color={theme.activeArrow} width={Math.max(0.08, 1.8 * unit)} />
           ))}
           {/* every halo first, then every arrow, then every badge: no arrow is cut by another's halo */}
           {layout.arrows.map((a) => (
@@ -591,6 +578,10 @@ function FocusUnder({
         />
       )}
       {cur?.turn ? <TurnCue at={cur.to} turn={cur.turn} color={theme.activeArrow} width={Math.max(0.12, 2.8 * unit)} /> : null}
+      {/* the weight-bearing foot swivels (a pivot): its own cue, so the whole turn of the body shows */}
+      {cur?.pivot && cur.pivotAt ? (
+        <TurnCue at={cur.pivotAt} turn={cur.pivot} color={theme.activeArrow} width={Math.max(0.12, 2.8 * unit)} />
+      ) : null}
       {cur?.arrow && <LiveArrowPath step={cur} color={theme.activeArrow} width={arrowW} unit={unit} />}
     </G>
   );

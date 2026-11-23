@@ -35,7 +35,7 @@ import {
   useToast,
   type MenuItem,
 } from '@/components/ui';
-import { barRanges, computeStates, describeStep, describeStepShort, mirrorPattern, stepStartBeats, totalBeats } from '@/lib/pattern';
+import { analyzeStep, barRanges, computeStates, describeStep, mirrorPattern, stepStartBeats, totalBeats } from '@/lib/pattern';
 import { errorText, useT } from '@/lib/i18n';
 import { usePrefs } from '@/lib/prefs';
 import { useDances } from '@/lib/store';
@@ -139,14 +139,20 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
   const lines: CountLine[] = shownRoles.map((r) => {
     const p = patterns[r]!;
     const st = index >= 0 ? (p.steps[index] ?? null) : null;
+    // the Both view has one short line per role: its turn goes in a chip of its own ("↺ 90°")
+    // so it is never the part an ellipsis cuts off
+    const info = st && shownRoles.length > 1 ? analyzeStep(st, states[r]![index]) : null;
+    const turn = info && info.kind !== 'hold' ? info.turn : 0;
     const text = st
-      ? (shownRoles.length > 1 ? describeStepShort : describeStep)(st, states[r]![index], t)
+      ? info
+        ? t.step.short(turn && info.kind !== 'hold' ? { ...info, turn: 0 } : info)
+        : describeStep(st, states[r]![index], t)
       : p.steps.length === 0
         ? t.player.nothingToPlay
         : shownRoles.length > 1
           ? t.player.startPosition
           : t.player.startPositionHint;
-    return { role: r, step: st, text };
+    return { role: r, step: st, text, turn };
   });
 
   const stageRoles: StageRole[] = shownRoles.map((r) => ({

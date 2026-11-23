@@ -55,7 +55,10 @@ export const ChartControls = memo(function ChartControls({ bars, value, onChange
   const t = useT();
   const options = [
     ...bars.map((b, i) => ({ value: String(b.bar), label: bars.length > 4 ? `${i + 1}` : t.chart.bar(i + 1), accessibilityLabel: t.chart.bar(i + 1) })),
-    { value: 'all', label: t.chart.all, accessibilityLabel: t.chart.allA11y },
+    // six bars and "All" leave too little room for the word on a small phone: the chart icon says it
+    bars.length > 5 && narrow
+      ? { value: 'all', label: '', icon: 'chart' as const, accessibilityLabel: t.chart.allA11y }
+      : { value: 'all', label: t.chart.all, accessibilityLabel: t.chart.allA11y },
   ];
   return (
     <View style={s.wrap} testID="chart-controls">

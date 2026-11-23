@@ -31,6 +31,13 @@ export interface Step {
   kind: StepKind;
   /** Where the moving foot ends up. Ignored for `hold`. */
   to: FootPos;
+  /**
+   * Optional: degrees the OTHER foot (the one carrying the weight) swivels on the spot while this
+   * step is taken (positive = clockwise), e.g. the pivot of a spin or a New Yorker. It can exceed
+   * 180°, and its sign also says which way a half turn (exactly 180°) of the moving foot goes.
+   * Ignored for `hold`. Missing = no swivel.
+   */
+  pivot?: number;
   note?: string;
 }
 

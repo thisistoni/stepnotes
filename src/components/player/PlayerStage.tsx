@@ -1,11 +1,11 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import type { SharedValue } from 'react-native-reanimated';
+import { useReducedMotion, type SharedValue } from 'react-native-reanimated';
 
 import { StepDiagram } from '@/components/StepDiagram';
 import { Icon, Segmented, Stage, Text } from '@/components/ui';
 import { layoutChart, layoutLive, type Bounds } from '@/lib/chartLayout';
-import { barRanges, computeStates, slicePattern } from '@/lib/pattern';
+import { barRanges, computeStates, facingOf, slicePattern } from '@/lib/pattern';
 import { useT } from '@/lib/i18n';
 import { colors, radius, roleTheme, ROLE_COLOR, withAlpha, type ColorSet } from '@/lib/theme';
 import type { FootStyle, Pattern, Role } from '@/lib/types';
@@ -36,8 +36,11 @@ interface Props {
   height: number;
 }
 
-/** Facing indicator: which way is forward on the diagram ("Mirrored" in mirror mode). */
-function FacingTag({ tone, mirrored, compact }: { tone: ColorSet; mirrored: boolean; compact?: boolean }) {
+/**
+ * Facing indicator: which way is forward on the diagram ("Mirrored" in mirror mode). The arrow
+ * turns with the dancer (`deg`, 0 = up): after a quarter turn "forward" is no longer up the screen.
+ */
+function FacingTag({ tone, mirrored, compact, deg = 0 }: { tone: ColorSet; mirrored: boolean; compact?: boolean; deg?: number }) {
   const t = useT();
   const label = mirrored ? t.player.mirrored : t.player.facing;
   return (
@@ -45,8 +48,11 @@ function FacingTag({ tone, mirrored, compact }: { tone: ColorSet; mirrored: bool
       style={[s.facing, compact && s.facingCompact]}
       accessible
       accessibilityLabel={mirrored ? t.player.mirroredA11y : t.player.facingA11y}
+      testID="facing-tag"
     >
-      <Icon name={mirrored ? 'mirror' : 'arrow-up'} size={13} color={tone.deep} strokeWidth={3} />
+      <View style={deg ? { transform: [{ rotate: `${Math.round(deg)}deg` }] } : undefined} testID={`facing-${Math.round(deg)}`}>
+        <Icon name={mirrored ? 'mirror' : 'arrow-up'} size={13} color={tone.deep} strokeWidth={3} />
+      </View>
       {!compact && (
         <Text variant="overline" color={tone.deep} style={s.facingText}>
           {label}
@@ -85,6 +91,84 @@ function chartFor(pattern: Pattern, beatsPerBar: number, chartBar: ChartBar): Ch
   return { pattern: slicePattern(pattern, bar.from, bar.to, computeStates(pattern)), bounds: undefined };
 }
 
+/**
+ * Which way the dancer faces on what is shown: after the current step in the animation, at the
+ * start of the bar in a one-bar chart, at the start of the pattern in the chart of all bars.
+ */
+function facingFor(pattern: Pattern, mode: StageMode, index: number, beatsPerBar: number, chartBar: ChartBar) {
+  const states = computeStates(pattern);
+  if (mode === 'live') return facingOf(states[Math.max(0, Math.min(states.length - 1, index + 1))]);
+  if (chartBar === 'all') return facingOf(states[0]);
+  const bar = barRanges(pattern, beatsPerBar).find((b) => b.bar === chartBar);
+  return facingOf(states[bar ? bar.from : 0]);
+}
+
+/** Bars the animated view shows at once in a long routine (the starters' figures are two bars long). */
+const WINDOW_BARS = 2;
+
+/** First step of the animation window that step `index` belongs to, or -1 when the whole pattern fits. */
+function windowStart(pattern: Pattern, beatsPerBar: number, index: number) {
+  const bars = barRanges(pattern, beatsPerBar);
+  if (bars.length <= WINDOW_BARS) return -1;
+  const k = Math.max(0, bars.findIndex((b) => index >= b.from && index < b.to));
+  return bars[Math.floor(k / WINDOW_BARS) * WINDOW_BARS].from;
+}
+
+/**
+ * The animated view of a long routine fits two bars at a time instead of the whole routine, so the
+ * feet stay big enough to read (a six-bar routine that turns round the floor would otherwise shrink
+ * them to half). The window has the same shape as the whole routine's bounds, so the diagram keeps
+ * its size and only the content zooms; it starts where the feet are before its first step.
+ */
+function windowBounds(pattern: Pattern, beatsPerBar: number, from: number): Bounds | undefined {
+  if (from < 0) return undefined;
+  const bars = barRanges(pattern, beatsPerBar);
+  const k = bars.findIndex((b) => b.from === from);
+  if (k < 0) return undefined;
+  const to = bars[Math.min(bars.length - 1, k + WINDOW_BARS - 1)].to;
+  const states = computeStates(pattern);
+  const slice = slicePattern(pattern, from, to, states);
+  const b = layoutLive(slice, computeStates(slice)).bounds;
+  const full = layoutLive(pattern, states).bounds;
+  const aspect = (full.maxX - full.minX) / (full.maxY - full.minY);
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  const cx = (b.minX + b.maxX) / 2;
+  const cy = (b.minY + b.maxY) / 2;
+  const W = Math.max(w, h * aspect);
+  const H = W / aspect;
+  return { minX: cx - W / 2, maxX: cx + W / 2, minY: cy - H / 2, maxY: cy + H / 2 };
+}
+
+/** `target`, eased over ~350 ms whenever it changes (a camera move, not a jump). */
+function useTweenedBounds(target: Bounds | undefined): Bounds | undefined {
+  const reduced = useReducedMotion();
+  const [shown, setShown] = useState(target);
+  const fromRef = useRef(target);
+  useEffect(() => {
+    const from = fromRef.current;
+    if (!target || !from || reduced) {
+      fromRef.current = target;
+      setShown(target);
+      return;
+    }
+    let raf = 0;
+    const t0 = Date.now();
+    const tick = () => {
+      const k = Math.min(1, (Date.now() - t0) / 350);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      const mix = (a: number, b: number) => a + (b - a) * e;
+      const b: Bounds = { minX: mix(from.minX, target.minX), maxX: mix(from.maxX, target.maxX), minY: mix(from.minY, target.minY), maxY: mix(from.maxY, target.maxY) };
+      fromRef.current = b;
+      setShown(b);
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, reduced]);
+  return target ? shown : undefined;
+}
+
 /** Width / height of what a role's diagram will draw (to choose the Both arrangement). */
 function contentSize(r: StageRole, mode: StageMode, chart: Chart) {
   const b =
@@ -102,6 +186,7 @@ const RoleDiagram = memo(function RoleDiagram({
   letters,
   chart,
   maxHeight,
+  beatsPerBar,
 }: {
   r: StageRole;
   mode: StageMode;
@@ -110,8 +195,12 @@ const RoleDiagram = memo(function RoleDiagram({
   letters: boolean;
   chart: Chart;
   maxHeight: number;
+  beatsPerBar: number;
 }) {
   const theme = roleTheme(r.role);
+  const from = mode === 'live' && r.synced ? windowStart(r.pattern, beatsPerBar, index) : -1;
+  const target = useMemo(() => windowBounds(r.pattern, beatsPerBar, from), [r.pattern, beatsPerBar, from]);
+  const liveBounds = useTweenedBounds(target);
   if (mode === 'overview') {
     return (
       <StepDiagram
@@ -133,6 +222,7 @@ const RoleDiagram = memo(function RoleDiagram({
       theme={theme}
       footStyle={r.footStyle}
       mode="live"
+      bounds={liveBounds}
       beat={beat}
       index={r.synced ? index : undefined}
       showLetters={letters}
@@ -169,6 +259,10 @@ export const PlayerStage = memo(function PlayerStage({
   const t = useT();
   const narrow = winW < 370;
   const charts = useMemo(() => roles.map((r) => chartFor(r.pattern, beatsPerBar, chartBar)), [roles, beatsPerBar, chartBar]);
+  const facings = useMemo(
+    () => roles.map((r) => facingFor(r.pattern, mode, r.synced ? index : -1, beatsPerBar, chartBar)),
+    [roles, mode, index, beatsPerBar, chartBar],
+  );
   // Both: side by side (the default) or stacked, whichever draws the feet bigger. Wide patterns
   // (Bachata, Cha-Cha charts) get about twice the size stacked.
   const stacked = useMemo(() => {
@@ -219,7 +313,7 @@ export const PlayerStage = memo(function PlayerStage({
         tone={tone}
         height={stageH}
         topLeft={toggle}
-        topRight={<FacingTag tone={tone} mirrored={mirrored} compact={narrow} />}
+        topRight={<FacingTag tone={tone} mirrored={mirrored} compact={narrow} deg={mirrored ? 0 : facings[0]} />}
         topInset={TOP_INSET_SINGLE}
         padding={PAD}
         testID="stage"
@@ -232,6 +326,7 @@ export const PlayerStage = memo(function PlayerStage({
           letters={letters}
           chart={charts[0]}
           maxHeight={stageH - TOP_INSET_SINGLE - PAD - 4}
+          beatsPerBar={beatsPerBar}
         />
       </Stage>
     );
@@ -244,7 +339,9 @@ export const PlayerStage = memo(function PlayerStage({
     <View style={{ height }} testID="stage">
       <View style={s.toolbar}>
         {toggle}
-        <FacingTag tone={tone} mirrored={mirrored} compact={narrow} />
+        {/* the roles can face different ways (one turns, the other not): each stage shows its own
+            facing arrow; the shared tag here only says "Mirrored" */}
+        {mirrored && <FacingTag tone={tone} mirrored compact={narrow} />}
       </View>
       <View style={[s.pair, stacked && s.stack]} testID={stacked ? 'stage-stacked' : 'stage-side-by-side'}>
         {roles.map((r, i) => (
@@ -253,6 +350,7 @@ export const PlayerStage = memo(function PlayerStage({
             tone={tone}
             height={stageH}
             topLeft={<RoleTag role={r.role} />}
+            topRight={mirrored ? undefined : <FacingTag tone={tone} mirrored={false} compact deg={facings[i]} />}
             topInset={inset}
             padding={6}
             style={s.half}
@@ -265,6 +363,7 @@ export const PlayerStage = memo(function PlayerStage({
               letters={letters}
               chart={charts[i]}
               maxHeight={stageH - inset - 6 - 4}
+              beatsPerBar={beatsPerBar}
             />
           </Stage>
         ))}

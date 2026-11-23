@@ -1,4 +1,4 @@
-import { samePos, type FeetState } from './pattern';
+import { otherFoot, samePos, stepPivot, stepTurn, type FeetState } from './pattern';
 import type { Foot, FootPos, Pattern } from './types';
 
 /**
@@ -55,6 +55,8 @@ export interface ChartArrow {
 export interface ChartLayout {
   feet: ChartFoot[];
   arrows: ChartArrow[];
+  /** turn cues (feet turning on the spot); included in `bounds` */
+  turns: ChartTurn[];
   bounds: Bounds;
 }
 
@@ -189,7 +191,9 @@ function headSegs(tip: Vec, dir: Vec): [Vec, Vec][] {
 function collectFeet(pattern: Pattern, states: FeetState[]): ChartFoot[] {
   const out: ChartFoot[] = [];
   const add = (foot: Foot, pos: FootPos, isStart: boolean, isTap: boolean) => {
-    const existing = out.find((o) => o.foot === foot && samePos(o.pos, pos) && Math.abs(o.pos.rot - pos.rot) < 5);
+    // one print per foot and place: a foot that turns on the spot (a pivot, or a step in place
+    // with a turn) keeps the print it landed with, and its turn is drawn as a cue (`chartTurns`)
+    const existing = out.find((o) => o.foot === foot && samePos(o.pos, pos));
     if (existing) {
       if (!isTap) existing.isTap = false;
       return;
@@ -303,10 +307,20 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
     chosen: number;
   }
   const pending: Pending[] = [];
+  // a figure danced twice (the chart of all bars) draws each move once, not two arrows on top of
+  // each other: same foot, same way, same count
+  const drawnMoves = new Set<string>();
 
   pattern.steps.forEach((step, i) => {
     if (step.kind === 'hold') return;
-    const from = states[i].pos[step.foot];
+    const a0 = states[i].pos[step.foot];
+    const a1 = states[i + 1].pos[step.foot];
+    const move = [step.foot, step.kind, step.count, a0.x, a0.y, a1.x, a1.y].map((v) => (typeof v === 'number' ? v.toFixed(2) : v)).join('|');
+    if (drawnMoves.has(move)) return;
+    drawnMoves.add(move);
+    // the print as drawn: a foot that pivoted since it landed keeps the print of its landing
+    const at = states[i].pos[step.foot];
+    const from = feet.find((f) => f.foot === step.foot && samePos(f.pos, at))?.pos ?? at;
     const to = states[i + 1].pos[step.foot];
     const dashed = step.kind === 'tap';
     const outward = step.foot === 'L' ? -1 : 1;
@@ -586,9 +600,62 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
       ys.push(ar.labelAt.y - labelR - mArrow, ar.labelAt.y + labelR + mArrow);
     });
   }
+  const turns = chartTurns(pattern, states);
+  turns.forEach(({ at, turn }) => {
+    for (const q of turnArcPoints(at, turn, 0.3)) {
+      xs.push(q.x);
+      ys.push(q.y);
+    }
+  });
   const bounds = growTo({ minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) }, 6);
 
-  return { feet, arrows, bounds };
+  return { feet, arrows, turns, bounds };
+}
+
+/** A curved turn cue on the printed chart: a foot turning on the spot. */
+export interface ChartTurn {
+  /** the foot's print position, with the direction it ends up in */
+  at: FootPos;
+  turn: number;
+}
+
+/**
+ * Turn cues for the printed chart, only where a print cannot show the turn: a foot turning on the
+ * spot, by a step in place with a turn or by the pivot (swivel) of the weight-bearing foot. The
+ * turns a foot makes while it stays on one print are added up, so a pivot and the turn back
+ * (a New Yorker) cancel out, and a spin shows once. A foot that turns while it travels lands as a
+ * turned print, which already says it (more arcs would only crowd a chart of turning figures).
+ */
+export function chartTurns(pattern: Pattern, states: FeetState[]): ChartTurn[] {
+  const out: ChartTurn[] = [];
+  const visit: Record<Foot, { sum: number; at: FootPos }> = {
+    L: { sum: 0, at: states[0].pos.L },
+    R: { sum: 0, at: states[0].pos.R },
+  };
+  const flush = (f: Foot) => {
+    if (Math.abs(visit[f].sum) >= TURN_MIN_DEG) out.push({ at: visit[f].at, turn: visit[f].sum });
+  };
+  pattern.steps.forEach((s, i) => {
+    if (s.kind === 'hold') return;
+    const from = states[i].pos[s.foot];
+    const after = states[i + 1].pos;
+    if (samePos(from, s.to)) {
+      visit[s.foot].sum += stepTurn(s, from.rot);
+      visit[s.foot].at = { ...visit[s.foot].at, rot: after[s.foot].rot };
+    } else {
+      flush(s.foot);
+      visit[s.foot] = { sum: 0, at: after[s.foot] };
+    }
+    const pivot = stepPivot(s);
+    if (pivot) {
+      const o = otherFoot(s.foot);
+      visit[o].sum += pivot;
+      visit[o].at = { ...visit[o].at, rot: after[o].rot };
+    }
+  });
+  flush('L');
+  flush('R');
+  return out;
 }
 
 // --- live (animated) layout --------------------------------------------------------------------
@@ -621,6 +688,12 @@ export interface LiveStep {
   arrow: LiveArrow | null;
   /** signed turn in degrees (positive = clockwise) when |turn| ≥ TURN_MIN_DEG, else 0 */
   turn: number;
+  /**
+   * the weight-bearing foot's swivel during this step (degrees, ≥ TURN_MIN_DEG, else 0) and where
+   * that foot is once it has swivelled (for its turn cue)
+   */
+  pivot: number;
+  pivotAt: FootPos | null;
   /** the foot lands right next to the other one (a closing step): its badge goes beside the arrow */
   closing: boolean;
 }
@@ -648,7 +721,10 @@ export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
     const to = after.pos[step.foot];
     const otherPos = after.pos[step.foot === 'L' ? 'R' : 'L'];
     const closing = !samePos(from, to) && hypot(to.x - otherPos.x, to.y - otherPos.y) < 1.7;
-    const base = { index: i, kind: step.kind, foot: step.foot, label: step.count, from, to, closing };
+    const rawPivot = stepPivot(step);
+    const pivot = Math.abs(rawPivot) >= TURN_MIN_DEG ? rawPivot : 0;
+    const pivotAt = pivot ? after.pos[otherFoot(step.foot)] : null;
+    const base = { index: i, kind: step.kind, foot: step.foot, label: step.count, from, to, closing, pivot, pivotAt };
     if (step.kind === 'hold') return { ...base, arrow: null, turn: 0 };
 
     const other = footCapsule(before.pos[step.foot === 'L' ? 'R' : 'L']);
@@ -656,7 +732,7 @@ export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
     const clear = (a: Vec, b: Vec, min: number) => distSegSeg(a, b, other[0], other[1]) - FOOT_RADIUS > min;
     const clearOwn = (a: Vec, b: Vec) => own.every(([c, d]) => distSegSeg(a, b, c, d) - FOOT_RADIUS > 0.08);
     const dashed = step.kind === 'tap';
-    const d = shortestTurn(from.rot, to.rot);
+    const d = stepTurn(step, from.rot);
     const turn = Math.abs(d) >= TURN_MIN_DEG ? d : 0;
     const outward = step.foot === 'L' ? -1 : 1;
 
@@ -736,10 +812,14 @@ export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
       xs.push(st.arrow.a.x, st.arrow.b.x, st.arrow.badge.x - LIVE_BADGE_R - 0.1, st.arrow.badge.x + LIVE_BADGE_R + 0.1);
       ys.push(st.arrow.a.y, st.arrow.b.y, st.arrow.badge.y - LIVE_BADGE_R - 0.1, st.arrow.badge.y + LIVE_BADGE_R + 0.1);
     }
-    if (st.turn) {
-      const r = TURN_ARC_R + 0.35;
-      xs.push(st.to.x - r, st.to.x + r);
-      ys.push(st.to.y - r, st.to.y + r);
+    const arcs: [FootPos, number][] = [];
+    if (st.turn) arcs.push([st.to, st.turn]);
+    if (st.pivotAt) arcs.push([st.pivotAt, st.pivot]);
+    for (const [at, turn] of arcs) {
+      for (const q of turnArcPoints(at, turn, 0.35)) {
+        xs.push(q.x);
+        ys.push(q.y);
+      }
     }
   });
   const m = 0.55;
@@ -793,11 +873,22 @@ function footSweep(a: FootPos, b: FootPos): [Vec, Vec][] {
   ];
 }
 
-function shortestTurn(from: number, to: number) {
-  let d = (to - from) % 360;
-  if (d > 180) d -= 360;
-  if (d < -180) d += 360;
-  return d;
+/**
+ * Points around the turn cue drawn at a foot (the arc of `TurnCue` in StepDiagram: radius
+ * TURN_ARC_R, centred on the middle of the turn, 70°–160° long), padded by `pad` for stroke and
+ * arrowhead. For bounds: only the side of the foot the arc is on, not a whole circle.
+ */
+export function turnArcPoints(at: FootPos, turn: number, pad: number): Vec[] {
+  const span = Math.max(70, Math.min(160, Math.abs(turn)));
+  const mid = at.rot - turn / 2;
+  const out: Vec[] = [];
+  for (let k = 0; k <= 8; k++) {
+    const a = ((mid - span / 2 + (span * k) / 8) * Math.PI) / 180;
+    const x = at.x + TURN_ARC_R * Math.sin(a);
+    const y = at.y - TURN_ARC_R * Math.cos(a);
+    out.push({ x: x - pad, y: y - pad }, { x: x + pad, y: y + pad });
+  }
+  return out;
 }
 
 export function growTo(b: Bounds, minSize: number): Bounds {
