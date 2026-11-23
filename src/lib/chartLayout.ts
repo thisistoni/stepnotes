@@ -32,6 +32,8 @@ export interface ChartArrow {
   type: 'move' | 'inPlace';
   a: Vec;
   b: Vec;
+  /** quadratic Bézier control point when the arrow bows around other feet (undefined = straight) */
+  c?: Vec;
   labelAt: Vec;
 }
 
@@ -80,6 +82,41 @@ function footCapsule(p: FootPos): [Vec, Vec] {
   ];
 }
 
+function unit(v: Vec): Vec {
+  const l = Math.hypot(v.x, v.y) || 1;
+  return { x: v.x / l, y: v.y / l };
+}
+
+/** Point just outside a foot's outline (an ellipse around the sole) in direction `dir`. */
+function edgePoint(p: FootPos, dir: Vec, gap: number): Vec {
+  const r = (p.rot * Math.PI) / 180;
+  // direction in the foot's own frame (y along the foot)
+  const lx = dir.x * Math.cos(r) + dir.y * Math.sin(r);
+  const ly = -dir.x * Math.sin(r) + dir.y * Math.cos(r);
+  const rx = FOOT_RADIUS + 0.02;
+  const ry = FOOT_HALF + FOOT_RADIUS - 0.1;
+  const t = 1 / Math.sqrt((lx / rx) ** 2 + (ly / ry) ** 2) + gap;
+  return { x: p.x + dir.x * t, y: p.y + dir.y * t };
+}
+
+export function curvePoint(a: Vec, b: Vec, c: Vec | undefined, t: number): Vec {
+  if (!c) return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+  const s = 1 - t;
+  return { x: s * s * a.x + 2 * s * t * c.x + t * t * b.x, y: s * s * a.y + 2 * s * t * c.y + t * t * b.y };
+}
+
+export function curveTangent(a: Vec, b: Vec, c: Vec | undefined, t: number): Vec {
+  if (!c) return { x: b.x - a.x, y: b.y - a.y };
+  return { x: 2 * (1 - t) * (c.x - a.x) + 2 * t * (b.x - c.x), y: 2 * (1 - t) * (c.y - a.y) + 2 * t * (b.y - c.y) };
+}
+
+function sampleCurve(a: Vec, b: Vec, c: Vec | undefined): Vec[] {
+  if (!c) return [a, b];
+  const out: Vec[] = [];
+  for (let k = 0; k <= 10; k++) out.push(curvePoint(a, b, c, k / 10));
+  return out;
+}
+
 // --- layout ----------------------------------------------------------------------------------
 
 function collectFeet(pattern: Pattern, states: FeetState[]): ChartFoot[] {
@@ -120,7 +157,8 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
   const arrowClearance = (a: Vec, b: Vec) => Math.min(Infinity, ...placed.map(([c, d]) => distSegSeg(a, b, c, d)));
   const free = (a: Vec, b: Vec) => footClearance(a, b) > 0.1 && arrowClearance(a, b) > 0.45;
 
-  type Pending = Omit<ChartArrow, 'labelAt'> & { labelCandidates: Vec[] };
+  /** segs = [from, to) indices into `placed` (a curve is several segments) */
+  type Pending = Omit<ChartArrow, 'labelAt'> & { labelCandidates: Vec[]; segs: [number, number] };
   const pending: Pending[] = [];
 
   pattern.steps.forEach((step, i) => {
@@ -148,6 +186,7 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
       }
       chosen ??= { s: seg(outward, 0.85), side: outward };
       placed.push(chosen.s);
+      const segs: [number, number] = [placed.length - 1, placed.length];
       const [a, b] = chosen.s;
       const sd = chosen.side;
       const labelCandidates: Vec[] = [];
@@ -156,7 +195,7 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
         for (const y of [0, -0.35, 0.35, -0.7, 0.7]) labelCandidates.push({ x: a.x + sd * d, y: to.y + y });
       for (const e of [0.55, 0.85]) labelCandidates.push({ x: a.x, y: a.y - e }, { x: a.x, y: b.y + e });
       for (const y of [0, -0.4, 0.4]) labelCandidates.push({ x: a.x - sd * 0.6, y: to.y + y });
-      pending.push({ key: `a${i}`, index: i, label: step.count, dashed, type: 'inPlace', a, b, labelCandidates });
+      pending.push({ key: `a${i}`, index: i, label: step.count, dashed, type: 'inPlace', a, b, labelCandidates, segs });
       return;
     }
 
@@ -165,44 +204,95 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
     const len = Math.hypot(dx, dy);
     const u = { x: dx / len, y: dy / len };
     const n = { x: -u.y, y: u.x };
-    // how far sideways we need to go to clear a (upright) foot
-    const base = Math.abs(n.x) * 0.5 + Math.abs(n.y) * 1.3 + 0.2;
-    const shrink = Math.min(0.55, len * 0.2);
-
-    const segFor = (off: number): [Vec, Vec] => [
-      { x: from.x + u.x * shrink + n.x * off, y: from.y + u.y * shrink + n.y * off },
-      { x: to.x - u.x * shrink + n.x * off, y: to.y - u.y * shrink + n.y * off },
-    ];
-
-    // Long moves may run straight past the feet; try the direct line first, then offsets.
-    const offsets = [0];
-    for (let k = 0; k < 7; k++) offsets.push(base + k * 0.55, -(base + k * 0.55));
-    let chosen: { s: [Vec, Vec]; off: number } | null = null;
-    for (const off of offsets) {
-      const s = segFor(off);
-      if (free(s[0], s[1])) {
-        chosen = { s, off };
-        break;
+    // The arrow always runs from the edge of the foot's old position to the edge of its new one,
+    // so it is unmistakably attached to that foot. If the straight line would run over other
+    // feet or arrows it bows out to one side (a curve) instead of being shifted off its feet.
+    const ends = [from, to];
+    const others = capsules.filter((_, k) => !ends.some((e) => feet[k].foot === step.foot && samePos(feet[k].pos, e)));
+    const otherClear = (pts: Vec[]) => {
+      let m = Infinity;
+      for (let k = 1; k < pts.length; k++) {
+        for (const [c, d] of others) m = Math.min(m, distSegSeg(pts[k - 1], pts[k], c, d) - FOOT_RADIUS);
+      }
+      return m;
+    };
+    const arrowClear = (pts: Vec[]) => {
+      let m = Infinity;
+      for (let k = 1; k < pts.length; k++) for (const [c, d] of placed) m = Math.min(m, distSegSeg(pts[k - 1], pts[k], c, d));
+      return m;
+    };
+    const curveFor = (bow: number) => {
+      const mx = (from.x + to.x) / 2 + n.x * bow * 2; // quadratic control point: the apex sits at bow
+      const my = (from.y + to.y) / 2 + n.y * bow * 2;
+      const c = { x: mx, y: my };
+      const a = edgePoint(from, bow === 0 ? u : unit({ x: c.x - from.x, y: c.y - from.y }), 0.12);
+      const b = edgePoint(to, bow === 0 ? { x: -u.x, y: -u.y } : unit({ x: c.x - to.x, y: c.y - to.y }), 0.16);
+      return { a, b, c: bow === 0 ? undefined : c };
+    };
+    // Short moves between neighbouring feet (closing steps) would give a stub of an arrow: they
+    // arc over the toes instead, high enough to read as an arrow.
+    const short = len < 2.2;
+    let chosen: { a: Vec; b: Vec; c?: Vec } | null = null;
+    const accept = (cv: { a: Vec; b: Vec; c?: Vec }) => {
+      if (Math.hypot(cv.b.x - cv.a.x, cv.b.y - cv.a.y) < 0.35) return false;
+      const pts = sampleCurve(cv.a, cv.b, cv.c);
+      return otherClear(pts) > 0.08 && arrowClear(pts) > 0.4;
+    };
+    if (short) {
+      // Short moves between neighbouring feet (closing steps) would give a stub of an arrow: they
+      // hop from toe to toe (or heel to heel) in a clear arc instead.
+      for (const end of [1, -1]) {
+        for (const h of [1.5, 2, 2.6]) {
+          const dirOf = (p: FootPos) => {
+            const r = (p.rot * Math.PI) / 180;
+            return { x: Math.sin(r) * end, y: -Math.cos(r) * end };
+          };
+          const da = dirOf(from);
+          const db = dirOf(to);
+          const a = edgePoint(from, unit({ x: da.x * 3 + u.x, y: da.y * 3 + u.y }), 0.1);
+          const b = edgePoint(to, unit({ x: db.x * 3 - u.x, y: db.y * 3 - u.y }), 0.16);
+          const up = unit({ x: da.x + db.x, y: da.y + db.y });
+          const c = { x: (a.x + b.x) / 2 + up.x * h, y: (a.y + b.y) / 2 + up.y * h };
+          if (accept({ a, b, c })) {
+            chosen = { a, b, c };
+            break;
+          }
+        }
+        if (chosen) break;
       }
     }
-    chosen ??= { s: segFor(base), off: base };
-    placed.push(chosen.s);
+    if (!chosen) {
+      const bows = [0];
+      for (let k = 1; k <= 7; k++) bows.push(k * 0.45, -k * 0.45);
+      for (const bow of bows) {
+        const cv = curveFor(bow);
+        if (accept(cv)) {
+          chosen = cv;
+          break;
+        }
+      }
+    }
+    chosen ??= curveFor(0.9);
+    const { a, b, c } = chosen;
+    const pts = sampleCurve(a, b, c);
+    for (let k = 1; k < pts.length; k++) placed.push([pts[k - 1], pts[k]]);
+    const segIndex = placed.length - (pts.length - 1);
 
-    const [a, b] = chosen.s;
-    // "outer" side = the side the arrow was pushed to (away from the feet it avoids)
-    const sgn = chosen.off === 0 ? 1 : Math.sign(chosen.off);
-    const at = (t: number, side: number, d: number): Vec => ({
-      x: a.x + (b.x - a.x) * t + n.x * side * d,
-      y: a.y + (b.y - a.y) * t + n.y * side * d,
-    });
+    // "outer" side = the side the arrow bows to (away from the feet it avoids)
+    const mt = unit(curveTangent(a, b, c, 0.5));
+    const apex = curvePoint(a, b, c, 0.5);
+    const sgn = c ? Math.sign(-mt.y * (apex.x - (a.x + b.x) / 2) + mt.x * (apex.y - (a.y + b.y) / 2)) || 1 : 1;
+    const at = (t: number, side: number, d: number): Vec => {
+      const p = curvePoint(a, b, c, t);
+      const tg = unit(curveTangent(a, b, c, t));
+      return { x: p.x - tg.y * side * d, y: p.y + tg.x * side * d };
+    };
     const labelCandidates: Vec[] = [];
-    // 1. midpoint on the outer side, sliding along the arrow to resolve collisions
+    // 1. beside the middle of the arrow on its outer side, sliding along it to resolve collisions
     for (const d of [0.6, 0.85, 1.15]) for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) labelCandidates.push(at(t, sgn, d));
-    // 2. on the arrow's own axis, just beyond its tail or its head (unambiguous for parallel arrows)
-    for (const e of [0.55, 0.85]) labelCandidates.push({ x: a.x - u.x * e, y: a.y - u.y * e }, { x: b.x + u.x * e, y: b.y + u.y * e });
-    // 3. inner side
+    // 2. inner side
     for (const d of [0.6, 0.85]) for (const t of [0.5, 0.35, 0.65]) labelCandidates.push(at(t, -sgn, d));
-    pending.push({ key: `a${i}`, index: i, label: step.count, dashed, type: 'move', a, b, labelCandidates });
+    pending.push({ key: `a${i}`, index: i, label: step.count, dashed, type: 'move', a, b, c, labelCandidates, segs: [segIndex, placed.length] });
   });
 
   // Labels after all arrows, so they can avoid every arrow.
@@ -213,20 +303,21 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
    * to its own arrow than to any other one (so "3" and "1" next to two parallel arrows can
    * always be told apart).
    */
-  const labelScore = (c: Vec, own: number) => {
+  const labelScore = (c: Vec, own: [number, number]) => {
     const lf = Math.min(Infinity, ...capsules.map(([p, q]) => distPointSeg(c, p, q) - FOOT_RADIUS - labelR));
-    const dOwn = distPointSeg(c, placed[own][0], placed[own][1]);
-    const dOther = Math.min(Infinity, ...placed.filter((_, k) => k !== own).map(([p, q]) => distPointSeg(c, p, q)));
+    const mine = (k: number) => k >= own[0] && k < own[1];
+    const dOwn = Math.min(...placed.filter((_, k) => mine(k)).map(([p, q]) => distPointSeg(c, p, q)));
+    const dOther = Math.min(Infinity, ...placed.filter((_, k) => !mine(k)).map(([p, q]) => distPointSeg(c, p, q)));
     const ll = Math.min(Infinity, ...labels.map((l) => Math.hypot(l.x - c.x, l.y - c.y) - LABEL_SIZE));
     const ambiguity = dOther - dOwn - AMBIGUITY_MARGIN;
     return Math.min(lf, dOwn - labelR + 0.1, dOther - labelR + 0.05, ll, ambiguity);
   };
-  const arrows: ChartArrow[] = pending.map(({ labelCandidates, ...rest }, k) => {
+  const arrows: ChartArrow[] = pending.map(({ labelCandidates, segs, ...rest }) => {
     if (!withLabels) return { ...rest, labelAt: rest.b };
     let best = labelCandidates[0];
     let bestScore = -Infinity;
     for (const c of labelCandidates) {
-      const sc = labelScore(c, k);
+      const sc = labelScore(c, segs);
       if (sc > 0.05) {
         best = c;
         break;
@@ -248,8 +339,10 @@ export function layoutChart(pattern: Pattern, states: FeetState[], options: Layo
     ys.push(p.y - 0.55, p.y + 0.55, q.y - 0.55, q.y + 0.55);
   });
   arrows.forEach((ar) => {
-    xs.push(ar.a.x, ar.b.x);
-    ys.push(ar.a.y, ar.b.y);
+    for (const p of sampleCurve(ar.a, ar.b, ar.c)) {
+      xs.push(p.x);
+      ys.push(p.y);
+    }
     if (withLabels) {
       xs.push(ar.labelAt.x - labelR, ar.labelAt.x + labelR);
       ys.push(ar.labelAt.y - labelR, ar.labelAt.y + labelR);
@@ -467,17 +560,6 @@ function shortestTurn(from: number, to: number) {
   if (d > 180) d -= 360;
   if (d < -180) d += 360;
   return d;
-}
-
-/** Smallest box containing all of the given bounds (e.g. one zoom for every per-bar chart). */
-export function unionBounds(list: Bounds[]): Bounds | null {
-  if (list.length === 0) return null;
-  return {
-    minX: Math.min(...list.map((b) => b.minX)),
-    minY: Math.min(...list.map((b) => b.minY)),
-    maxX: Math.max(...list.map((b) => b.maxX)),
-    maxY: Math.max(...list.map((b) => b.maxY)),
-  };
 }
 
 export function growTo(b: Bounds, minSize: number): Bounds {

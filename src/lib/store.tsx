@@ -37,9 +37,10 @@ export interface DanceStore {
 const Ctx = createContext<DanceStore | null>(null);
 
 /** Sanitise what was stored: drop records that cannot be repaired instead of crashing. */
-function sanitizeStored(raw: unknown): Dance[] {
+function sanitizeStored(raw: unknown, dropped: () => void): Dance[] {
   if (!Array.isArray(raw)) {
     console.warn('Stored dances are not a list; ignoring them.');
+    dropped();
     return [];
   }
   const out: Dance[] = [];
@@ -52,6 +53,7 @@ function sanitizeStored(raw: unknown): Dance[] {
       out.push(d);
     } catch (e) {
       console.warn('Dropping an unreadable stored dance:', e instanceof Error ? e.message : e);
+      dropped();
     }
   }
   return out;

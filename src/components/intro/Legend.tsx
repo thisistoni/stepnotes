@@ -69,6 +69,7 @@ const Row = memo(function Row({
       accessible
       accessibilityLabel={`${row.title}: ${row.body}`}
       accessibilityState={{ selected: active }}
+      aria-selected={active}
       testID={`legend-${row.key}${active ? '-active' : ''}`}
     >
       <Animated.View style={[StyleSheet.absoluteFill, s.highlight, { backgroundColor: tone.wash, borderColor: tone.border }, highlight]} />

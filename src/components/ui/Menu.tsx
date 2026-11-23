@@ -51,6 +51,7 @@ export function Menu({ visible, onClose, title, items }: MenuProps) {
             accessibilityRole="menuitem"
             accessibilityLabel={it.hint ? `${it.label}. ${it.hint}` : it.label}
             accessibilityState={{ disabled: !!it.disabled }}
+            aria-disabled={!!it.disabled}
             disabled={it.disabled}
             onPress={() => {
               pending.current = it.onPress;

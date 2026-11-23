@@ -23,6 +23,7 @@ export function StyleFilterChips({
       contentContainerStyle={s.row}
       style={s.scroll}
       accessibilityLabel="Filter by style"
+      accessibilityRole="radiogroup"
     >
       <Chip label="All" selected={value === null} onPress={() => onChange(null)} testID="filter-all" />
       {filters.map((f) => (

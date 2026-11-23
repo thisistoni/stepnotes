@@ -14,10 +14,12 @@ import { EditorCanvas, RotateTray } from '@/components/editor/EditorCanvas';
 import { EditorTopBar } from '@/components/editor/EditorTopBar';
 import { FollowerSetupCard, FollowerToolsCard } from '@/components/editor/FollowerCards';
 import { Inspector } from '@/components/editor/Inspector';
+import { DanceNotFound } from '@/components/DanceNotFound';
 import { RevealProvider, useRevealScroll } from '@/components/editor/reveal';
 import { StepStrip } from '@/components/editor/StepStrip';
-import { EmptyState, Entrance, FootSticker, goBackOrHome, hapticNotify, Screen, Segmented, Skeleton, useConfirm, useToast } from '@/components/ui';
+import { Entrance, goBackOrHome, hapticNotify, Screen, Segmented, Skeleton, useConfirm, useToast } from '@/components/ui';
 import { computeStates, nextCount } from '@/lib/pattern';
+import { PersistError } from '@/lib/persist';
 import { newDance, useDances } from '@/lib/store';
 import { DEFAULT_FOOT_STYLE, ROLE_COLOR, space, styleColor } from '@/lib/theme';
 import type { Dance, Role } from '@/lib/types';
@@ -41,19 +43,7 @@ export default function EditorRoute() {
   // Starter dances are read-only: the player offers "Make my own version".
   if (!isNew && isBuiltIn(id)) return <Redirect href={`/dance/${id}`} />;
   const existing = isNew ? undefined : get(id);
-  if (!isNew && !existing) {
-    return (
-      <Screen header={<EditorTopBar title="Not found" onClose={goBackOrHome} />}>
-        <EmptyState
-          art={<FootSticker tone={ROLE_COLOR.leader} size={44} rotate={-10} />}
-          title="This dance is gone"
-          body="It may have been deleted."
-          action={{ label: 'Back to library', onPress: () => router.replace('/') }}
-          style={s.notFound}
-        />
-      </Screen>
-    );
-  }
+  if (!isNew && !existing) return <DanceNotFound testID="editor-not-found" />;
   const source = isNew && from ? get(from) : undefined;
   // key: another dance (or another source) gets a fresh editor
   return <Editor key={`${id}:${source?.id ?? ''}`} existing={existing} source={source} />;
@@ -101,7 +91,7 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
   const [blocked, setBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const { scrollRef, contentRef, onScroll, onLayout, reveal: revealField } = useRevealScroll();
+  const { scrollRef, contentRef, onScroll, onLayout, onContentLayout, reveal: revealField } = useRevealScroll();
 
   // --- leaving -------------------------------------------------------------------------------
   const askDiscard = useCallback(
@@ -154,7 +144,7 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
     } catch (e) {
       setSaving(false);
       toast.show({
-        message: e instanceof DanceValidationError ? e.message : 'Could not save. Please try again.',
+        message: e instanceof DanceValidationError || e instanceof PersistError ? e.message : 'Could not save. Please try again.',
         icon: 'alert',
       });
     }
@@ -165,19 +155,19 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
   const step = pattern && sel >= 0 ? pattern.steps[sel] : null;
 
   // The toast's Undo only applies while the delete is still the latest change.
-  const depth = useRef(d.undoDepth);
+  const rev = useRef(d.rev);
   useEffect(() => {
-    depth.current = d.undoDepth;
-  }, [d.undoDepth]);
+    rev.current = d.rev;
+  }, [d.rev]);
   const { deleteStep: removeStep, undo } = d;
   const deleteStep = useCallback(
     (i: number) => {
-      const expected = depth.current + 1;
+      const expected = rev.current + 1;
       removeStep(i);
       toast.show({
         message: `Step ${i + 1} deleted`,
         icon: 'trash',
-        action: { label: 'Undo', onPress: () => depth.current === expected && undo() },
+        action: { label: 'Undo', onPress: () => rev.current === expected && undo() },
       });
     },
     [removeStep, undo, toast],
@@ -257,7 +247,7 @@ function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.content}
       >
-        <View ref={contentRef} style={s.stack}>
+        <View ref={contentRef} onLayout={onContentLayout} style={s.stack}>
           <RevealProvider value={revealField}>
             <Entrance index={0}>
               <DetailsCard
@@ -339,5 +329,4 @@ const s = StyleSheet.create({
   work: { gap: space.m },
   hintRow: { flexDirection: 'row', alignItems: 'center', gap: space.m },
   loadingStage: { marginTop: space.l },
-  notFound: { marginTop: space.xl },
 });

@@ -9,8 +9,8 @@
 // --- foundations ---
 /** Text with variants: display · title · heading · cardTitle · body · bodyStrong · label · small · smallStrong · caption · overline · numeralSm · numeral. `color` takes a token. */
 export { Text, resolveColor, type TextProps, type TextVariant } from './Text';
-/** Our SVG icon set (`<Icon name="play" size={24} color={colors.ink} />`); `ICON_NAMES` lists them. */
-export { Icon, ICON_NAMES, type IconName, type IconProps } from '../Icon';
+/** Our SVG icon set (`<Icon name="play" size={24} color={colors.ink} />`). */
+export { Icon, type IconName, type IconProps } from '../Icon';
 /** Haptics helpers (no-ops on web) and `useReducedMotion`. */
 export { hapticNotify, hapticPress, hapticSelect, hapticStep, useReducedMotion } from './feedback';
 /** Staggered fade-up on first mount (`<Entrance index={i}>`); Screen provides the scope. */
@@ -55,7 +55,7 @@ export { Skeleton, type SkeletonProps } from './Skeleton';
 // --- layout ---
 /** Screen scaffold: safe areas, 480 column, scroll + keyboard avoidance, pinned `footer`, `fab`. */
 export { Screen, type ScreenProps } from './Screen';
-/** Header: back/close (falls back to `/`), centred title + subtitle, right actions; `large` home title. */
+/** Header: back/close (falls back to `/`), title + subtitle, right actions; `large` home title. */
 export { goBackOrHome, Header, type HeaderProps } from './Header';
 
 // --- overlays & feedback ---

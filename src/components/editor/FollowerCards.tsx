@@ -23,8 +23,8 @@ export function FollowerSetupCard({ onCreate }: { onCreate: (mode: 'mirror' | 'e
       <View style={s.buttons}>
         <View>
           <Button label="Mirror from leader" icon="mirror" tone={F} onPress={() => onCreate('mirror')} testID="follower-mirror" />
-          <Text variant="caption" color={F.deep} align="center" style={s.reco}>
-            Recommended: you can adjust any step afterwards
+          <Text variant="caption" color="ink2" align="center" style={s.reco}>
+            Recommended. You can adjust any step afterwards.
           </Text>
         </View>
         <Button label="Start empty" variant="secondary" onPress={() => onCreate('empty')} testID="follower-empty" />

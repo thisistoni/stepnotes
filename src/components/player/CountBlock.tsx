@@ -12,7 +12,7 @@ import Animated, {
 
 import { FootBadge, Icon, Text, useReducedMotion } from '@/components/ui';
 import type { BarRange } from '@/lib/pattern';
-import { colors, lip, motion, radius, ROLE_COLOR, space, typography } from '@/lib/theme';
+import { colors, lip, motion, radius, ROLE_COLOR, typography } from '@/lib/theme';
 import type { Role, Step } from '@/lib/types';
 
 import { BeatPills } from './BeatPills';
@@ -208,4 +208,3 @@ const s = StyleSheet.create({
   lineText: { flex: 1 },
 });
 
-export const COUNT_GAP = space.m;

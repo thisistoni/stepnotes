@@ -1,8 +1,5 @@
 import type { Foot, FootPos, Pattern, Step } from './types';
 
-export const FOOT_LENGTH = 2.6;
-export const FOOT_WIDTH = 1;
-
 export const otherFoot = (f: Foot): Foot => (f === 'L' ? 'R' : 'L');
 
 export function uid(prefix = 'id'): string {
@@ -111,14 +108,6 @@ export function frameAt(pattern: Pattern, states: FeetState[], beat: number): Fr
     };
   }
   return { index: i, feet, weight: t > 0.5 ? after.weight : before.weight, progress: t };
-}
-
-/** A beat value that shows step `index` finished (used when stepping manually). */
-export function beatForStep(pattern: Pattern, index: number) {
-  if (index < 0) return -1;
-  const starts = stepStartBeats(pattern);
-  const s = pattern.steps[index];
-  return starts[index] + stepBeats(s) * 0.75;
 }
 
 /**

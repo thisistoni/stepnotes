@@ -128,8 +128,6 @@ export type IconName = keyof typeof ICONS;
 
 /** Icons keep their size inside flex rows. */
 const NO_SHRINK = { flexShrink: 0 } as const;
-export const ICON_NAMES = Object.keys(ICONS) as IconName[];
-
 export interface IconProps {
   name: IconName;
   /** Box size in px (default 24) */

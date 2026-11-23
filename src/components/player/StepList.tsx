@@ -51,6 +51,7 @@ const Row = memo(function Row({
       accessibilityRole="button"
       accessibilityLabel={`Count ${step.count}. ${text}${step.note ? `. ${step.note}` : ''}`}
       accessibilityState={{ selected: current }}
+      aria-selected={current}
       accessibilityHint="Shows this step on the stage"
       testID={`step-row-${i}`}
       style={({ pressed }) => [s.row, current && { backgroundColor: c.wash, borderColor: c.border }, pressed && !current && s.pressed]}

@@ -79,8 +79,9 @@ export function Chip({
         colors={lipColors}
         radius={radius.chip}
         lipDepth={lip.md}
-        accessibilityRole={variant === 'toggle' ? 'switch' : 'button'}
-        accessibilityState={variant === 'toggle' ? { checked: selected } : undefined}
+        // toggle chips are switches; filter chips pick one of a set (a radio group)
+        accessibilityRole={variant === 'toggle' ? 'switch' : 'radio'}
+        accessibilityState={{ checked: !!selected }}
         accessibilityLabel={accessibilityLabel ?? label}
         hitSlop={4}
         testID={testID}

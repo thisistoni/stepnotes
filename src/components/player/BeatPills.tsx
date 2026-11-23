@@ -71,6 +71,7 @@ export const BeatPills = memo(function BeatPills({ steps, bars, index, tone, onJ
                 accessibilityRole="button"
                 accessibilityLabel={`Count ${st.count}, step ${i + 1}`}
                 accessibilityState={{ selected: state === 'current' }}
+                aria-selected={state === 'current'}
                 testID={`pill-${i}`}
                 style={[
                   s.pill,

@@ -29,7 +29,7 @@
  *                   at the current tempo, clamped to 280–900 ms). `index` changes when the glide
  *                   starts (forwards) or when it ends (backwards), so the arrow shown always belongs
  *                   to the step that is moving.
- *   gliding         React state: true while a stepTo glide runs
+ *   stepBy(±1)      previous / next step, counted from the glide target (rapid presses add up)
  *   restart()       jump to beat 0 and play
  *
  * Playback pauses automatically when the screen loses focus (Expo Router `useFocusEffect`) and
@@ -68,8 +68,11 @@ export interface Playback {
   seekToStep: (index: number) => void;
   /** Additive: glide to step `index` (see header). */
   stepTo: (index: number, opts?: { durationMs?: number; glide?: boolean }) => void;
-  /** Additive: true while a stepTo glide is animating. */
-  gliding: boolean;
+  /**
+   * Step one step forwards (+1, wrapping from the last step to the start position) or back (-1),
+   * counted from the step being glided TO, so quick repeated presses each move one more step.
+   */
+  stepBy: (delta: 1 | -1, opts?: { glide?: boolean }) => void;
   restart: () => void;
 }
 
@@ -83,9 +86,14 @@ const REST_EPS = 0.02;
 const MAX_FRAME_MS = 250;
 
 export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: PlaybackOptions): Playback {
-  const [index, setIndex] = useState(-1);
+  const [index, setIndexState] = useState(-1);
+  /** the step we are at or gliding to (updated at once, unlike `index` during a backward glide) */
+  const targetRef = useRef(-1);
+  const setIndex = useCallback((i: number) => {
+    targetRef.current = i;
+    setIndexState(i);
+  }, []);
   const [playing, setPlaying] = useState(false);
-  const [gliding, setGliding] = useState(false);
 
   const beat = useSharedValue(-1);
   const active = useSharedValue(false);
@@ -109,10 +117,13 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
   const frameRef = useRef<FrameCallback | null>(null);
 
   // JS-thread callbacks invoked from the worklet
-  const stepJS = useCallback((i: number) => {
-    setIndex(i);
-    onStepRef.current?.(i);
-  }, []);
+  const stepJS = useCallback(
+    (i: number) => {
+      setIndex(i);
+      onStepRef.current?.(i);
+    },
+    [setIndex],
+  );
   const endedJS = useCallback(() => {
     frameRef.current?.setActive(false);
     setPlaying(false);
@@ -168,7 +179,6 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
     const total = totalSV.get();
     if (total <= 0) return;
     cancelAnimation(beat);
-    setGliding(false);
     const b = beat.get();
     if (b < 0 || b >= total - 1e-6) {
       beat.set(0);
@@ -184,17 +194,15 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
 
   const pause = useCallback(() => {
     cancelAnimation(beat);
-    setGliding(false);
     active.set(false);
     frameRef.current?.setActive(false);
     setPlaying(false);
     setIndex(stepIndexAt(startsSV.get(), totalSV.get(), beat.get()));
-  }, [active, beat, startsSV, totalSV]);
+  }, [active, beat, startsSV, totalSV, setIndex]);
 
   const seekToStep = useCallback(
     (i: number) => {
       cancelAnimation(beat);
-      setGliding(false);
       active.set(false);
       frameRef.current?.setActive(false);
       setPlaying(false);
@@ -210,7 +218,7 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
       lastIndex.set(i);
       setIndex(i);
     },
-    [active, beat, startsSV, totalSV, lastIndex],
+    [active, beat, startsSV, totalSV, lastIndex, setIndex],
   );
 
   /** Resting beat of step i for stepTo: just before the next step starts; -1 = start position. */
@@ -225,10 +233,12 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
     [startsSV, totalSV],
   );
 
-  const glideEndJS = useCallback((i: number) => {
-    setGliding(false);
-    setIndex(i);
-  }, []);
+  const glideEndJS = useCallback(
+    (i: number) => {
+      setIndex(i);
+    },
+    [setIndex],
+  );
 
   const stepTo = useCallback(
     (target: number, opts?: { durationMs?: number; glide?: boolean }) => {
@@ -244,7 +254,6 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
       lastIndex.set(to);
       // only neighbouring steps glide (including start ↔ first step); anything else jumps
       if (n === 0 || Math.abs(to - cur) !== 1 || opts?.glide === false) {
-        setGliding(false);
         beat.set(restBeat(to));
         setIndex(to);
         return;
@@ -258,8 +267,10 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
       const beats = Math.abs(toBeat - fromBeat);
       const natural = (beats / Math.max(1, bpmSV.get())) * 60000;
       const ms = opts?.durationMs ?? Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, natural));
+      // forwards: the arrow of the step that is moving shows at once; backwards: `index` changes
+      // when the glide ends, but the target is known now (for quick repeated presses)
       if (forward) setIndex(to);
-      setGliding(true);
+      else targetRef.current = to;
       beat.set(
         withTiming(toBeat, { duration: ms, easing: Easing.linear }, (finished) => {
           'worklet';
@@ -269,7 +280,18 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
         }),
       );
     },
-    [active, beat, bpmSV, glideEndJS, lastIndex, restBeat, startsSV, totalSV],
+    [active, beat, bpmSV, glideEndJS, lastIndex, restBeat, startsSV, totalSV, setIndex],
+  );
+
+  const stepBy = useCallback(
+    (delta: 1 | -1, opts?: { glide?: boolean }) => {
+      const n = startsSV.get().length;
+      const t = Math.min(targetRef.current, n - 1);
+      const to = delta > 0 ? (t + 1 >= n ? -1 : t + 1) : Math.max(-1, t - 1);
+      if (to === t) return;
+      stepTo(to, opts);
+    },
+    [startsSV, stepTo],
   );
 
   const restart = useCallback(() => {
@@ -297,5 +319,5 @@ export function usePlayback({ totalBeats, bpm, stepStartBeats, loop, onStep }: P
     [active, beat],
   );
 
-  return { beat, index, playing, play, pause, toggle, seekToStep, stepTo, gliding, restart };
+  return { beat, index, playing, play, pause, toggle, seekToStep, stepTo, stepBy, restart };
 }

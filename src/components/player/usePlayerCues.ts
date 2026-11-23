@@ -18,7 +18,8 @@ interface CueOptions {
 /** Silence any spoken count (safe to call anywhere). */
 export function stopSpeech() {
   try {
-    Speech.stop();
+    // stop() is async: a rejection (no speech engine) must not surface as an unhandled rejection
+    Promise.resolve(Speech.stop()).catch(() => {});
   } catch {
     // speech synthesis unavailable (some browsers): nothing to stop
   }

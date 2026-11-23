@@ -71,10 +71,19 @@ export function PressableLip({
   );
 
   const c = disabled ? disabledColors : colors;
+  // State is also passed as ARIA props: react-native-web ignores `accessibilityState`, and RN
+  // supports the aria-* props natively. Radios / switches / checkboxes are "checked", the rest "selected".
+  const state = { disabled, selected, ...accessibilityState };
+  const checkable = accessibilityRole === 'radio' || accessibilityRole === 'switch' || accessibilityRole === 'checkbox';
+  const checked = state.checked ?? (checkable ? !!state.selected : undefined);
   return (
     <Pressable
       accessibilityRole={accessibilityRole}
-      accessibilityState={{ disabled, selected, ...accessibilityState }}
+      accessibilityState={state}
+      aria-disabled={state.disabled || undefined}
+      aria-busy={state.busy || undefined}
+      aria-checked={checkable ? checked === true : undefined}
+      aria-selected={!checkable && state.selected != null ? !!state.selected : undefined}
       disabled={disabled}
       onPressIn={(e) => {
         down.set(withSpring(1, motion.pressIn));

@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { Button, Entrance, Header, hapticNotify, Icon, Screen, Text, TextField, useToast } from '@/components/ui';
+import { PersistError } from '@/lib/persist';
 import { useDances } from '@/lib/store';
 import { colors, radius, space } from '@/lib/theme';
-import { DanceValidationError } from '@/lib/validate';
+import { DanceValidationError, parseDanceJson } from '@/lib/validate';
 
 /**
  * Clipboard without an extra dependency: only the browser's async Clipboard API qualifies
@@ -28,6 +29,18 @@ export default function ImportScreen() {
   const [error, setError] = useState<{ message: string; detail?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [clipboard] = useState(webClipboard);
+  // live feedback: what will be added (before pressing the button)
+  const preview = useMemo(() => {
+    if (!text.trim()) return null;
+    try {
+      const d = parseDanceJson(text);
+      const steps = Math.max(...Object.values(d.roles).map((p) => p?.steps.length ?? 0));
+      const parts = [d.style.trim(), `${steps} ${steps === 1 ? 'step' : 'steps'}`, d.roles.follower ? 'leader + follower' : ''].filter(Boolean);
+      return `Ready to add “${d.name.trim() || 'Untitled dance'}” · ${parts.join(' · ')}`;
+    } catch {
+      return null;
+    }
+  }, [text]);
 
   const onImport = async () => {
     setBusy(true);
@@ -43,7 +56,7 @@ export default function ImportScreen() {
       setError(
         e instanceof DanceValidationError
           ? { message: NOT_A_DANCE, detail: /StepNotes dance/i.test(e.message) ? undefined : e.message }
-          : { message: 'Could not save this dance. Please try again.' },
+          : { message: e instanceof PersistError ? e.message : 'Could not save this dance. Please try again.' },
       );
     }
   };
@@ -75,6 +88,8 @@ export default function ImportScreen() {
           testID="import-submit"
         />
       }
+      // a modal is presented as a page sheet on iOS: it already sits below the status bar
+      topInset={Platform.OS !== 'ios'}
       testID="import"
     >
       <Entrance index={0} style={s.intro}>
@@ -113,6 +128,14 @@ export default function ImportScreen() {
           error={error?.message}
           testID="import-field"
         />
+        {!error && !!preview && (
+          <View style={s.preview} testID="import-preview">
+            <Icon name="check" size={16} color={colors.primaryInk} strokeWidth={3} />
+            <Text variant="smallStrong" color="primaryInk" style={s.previewText}>
+              {preview}
+            </Text>
+          </View>
+        )}
         {!!error?.detail && (
           <Text variant="caption" color="ink2" style={s.detail} testID="import-detail">
             {error.detail}
@@ -135,6 +158,8 @@ const s = StyleSheet.create({
   },
   introText: { flex: 1 },
   detail: { marginTop: 6, marginLeft: 26 },
+  preview: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: space.s, marginHorizontal: 4 },
+  previewText: { flex: 1 },
   labelRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 44, marginBottom: space.s },
   label: { marginLeft: 4, marginBottom: 6 },
 });

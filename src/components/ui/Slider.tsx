@@ -155,6 +155,7 @@ export function Slider({
         accessibilityRole="adjustable"
         accessibilityLabel={label}
         accessibilityState={{ disabled: !!disabled }}
+        aria-disabled={!!disabled}
         accessibilityValue={{ min, max, now: value, text }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={(e) => nudge(e.nativeEvent.actionName === 'increment' ? 1 : -1)}

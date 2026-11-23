@@ -117,6 +117,7 @@ export function Segmented<T extends string>({
             key={o.value}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
+            aria-selected={selected}
             accessibilityLabel={o.accessibilityLabel ?? o.label}
             onPress={() => {
               if (o.value === value) return;

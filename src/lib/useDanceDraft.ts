@@ -28,6 +28,8 @@ interface Snapshot {
 export interface DraftState extends Snapshot {
   initial: Dance;
   past: Snapshot[];
+  /** increases with every change to the draft (edits, drags, undo); never wraps or caps */
+  rev: number;
   /** coalescing key of the last edit (typing) */
   group: string | null;
   /** drag in progress: the snapshot to push on the first real move */
@@ -66,6 +68,7 @@ function reducer(state: DraftState, a: Action): DraftState {
         ...state,
         ...next,
         past: coalesce ? state.past : push(state.past, snap(state)),
+        rev: state.rev + 1,
         group: a.group ?? null,
         pending: null,
       };
@@ -101,6 +104,7 @@ function reducer(state: DraftState, a: Action): DraftState {
         ...state,
         draft: withPattern(state.draft, state.role, np),
         past: state.pending ? push(state.past, state.pending) : state.past,
+        rev: state.rev + 1,
         pending: null,
       };
     }
@@ -109,7 +113,7 @@ function reducer(state: DraftState, a: Action): DraftState {
     case 'undo': {
       const prev = state.past[state.past.length - 1];
       if (!prev) return state;
-      return { ...state, ...prev, past: state.past.slice(0, -1), group: null, pending: null, dragging: false };
+      return { ...state, ...prev, past: state.past.slice(0, -1), rev: state.rev + 1, group: null, pending: null, dragging: false };
     }
     case 'seal':
       return state.group ? { ...state, group: null } : state;
@@ -124,6 +128,7 @@ function init(initial: Dance): DraftState {
     sel: { leader: -1, follower: -1 },
     startFoot: 'L',
     past: [],
+    rev: 0,
     group: null,
     pending: null,
     dragging: false,
@@ -303,12 +308,11 @@ export function useDanceDraft(initial: Dance) {
     startFoot: state.startFoot,
     dragging: state.dragging,
     canUndo: state.past.length > 0,
-    undoDepth: state.past.length,
+    /** change counter: compare to know whether anything changed since (e.g. a toast's Undo) */
+    rev: state.rev,
     dirty: state.draft !== state.initial,
   };
 }
-
-export type DanceDraft = ReturnType<typeof useDanceDraft>;
 
 /**
  * A new, unsaved copy of a dance ("Make my own version"): deep copy, fresh ids,

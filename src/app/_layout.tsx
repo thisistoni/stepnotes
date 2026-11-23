@@ -1,10 +1,16 @@
-import { Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
-import { Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold, Nunito_900Black } from '@expo-google-fonts/nunito';
+// Per-weight entry points: importing the package index would bundle every weight (21 files).
+import { Fredoka_500Medium } from '@expo-google-fonts/fredoka/500Medium';
+import { Fredoka_600SemiBold } from '@expo-google-fonts/fredoka/600SemiBold';
+import { Fredoka_700Bold } from '@expo-google-fonts/fredoka/700Bold';
+import { Nunito_600SemiBold } from '@expo-google-fonts/nunito/600SemiBold';
+import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
+import { Nunito_800ExtraBold } from '@expo-google-fonts/nunito/800ExtraBold';
+import { Nunito_900Black } from '@expo-google-fonts/nunito/900Black';
 import { useFonts } from 'expo-font';
 import { Stack, router, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -58,7 +64,15 @@ export default function RootLayout() {
 function AppStack({ fontsReady }: { fontsReady: boolean }) {
   const { ready: prefsReady, prefs } = usePrefs();
   const pathname = usePathname();
-  const gated = fontsReady && prefsReady && !prefs.onboardingDone && pathname !== '/intro';
+  // If storage (or font loading) hangs, do not stay blank forever: after the splash timeout, show
+  // the app with what we have (default prefs, system font).
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setTimedOut(true), SPLASH_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, []);
+  const ready = (fontsReady && prefsReady) || timedOut;
+  const gated = ready && !prefs.onboardingDone && pathname !== '/intro';
   // Stack.Protected sends blocked routes to the first available screen; make the target explicit
   // so a future unprotected route can never become the landing page.
   useEffect(() => {
@@ -67,7 +81,7 @@ function AppStack({ fontsReady }: { fontsReady: boolean }) {
   return (
     <SplashGate fontsReady={fontsReady}>
       {/* Nothing renders until fonts + prefs are known: no fallback-font flash, no intro flash. */}
-      {fontsReady && prefsReady ? (
+      {ready ? (
         <Stack
           unstable_screenErrorBoundary={ErrorScreen}
           screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}

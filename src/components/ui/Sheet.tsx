@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Modal, Platform, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,21 +29,50 @@ export function Sheet({ visible, onClose, onClosed, title, children, testID }: S
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const [mounted, setMounted] = useState(visible);
+  /** false once the exit animation ended: the native modal is being dismissed */
+  const [shown, setShown] = useState(visible);
   const t = useSharedValue(0);
   const drag = useSharedValue(0);
   const height = useSharedValue(800);
 
-  if (visible && !mounted) setMounted(true);
+  if (visible && (!mounted || !shown)) {
+    setMounted(true);
+    setShown(true);
+  }
+
+  // Follow-up actions (a ConfirmDialog, the share sheet) may only start once the native modal is
+  // really gone: on iOS presenting while another modal is dismissing can fail silently. iOS reports
+  // that with `onDismiss`; elsewhere (and as a fallback) we wait a moment.
+  const onClosedRef = useRef(onClosed);
+  useEffect(() => {
+    onClosedRef.current = onClosed;
+  });
+  const done = useRef(true);
+  const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dismissed = useCallback(() => {
+    if (fallback.current) clearTimeout(fallback.current);
+    fallback.current = null;
+    if (done.current) return;
+    done.current = true;
+    setMounted(false);
+    onClosedRef.current?.();
+  }, []);
+  useEffect(() => () => {
+    if (fallback.current) clearTimeout(fallback.current);
+  }, []);
 
   useEffect(() => {
     if (!mounted) return;
     if (visible) {
+      if (fallback.current) clearTimeout(fallback.current);
+      fallback.current = null;
+      done.current = false;
       drag.set(0);
       t.set(reduced ? withTiming(1, { duration: motion.base }) : withSpring(1, motion.sheet));
     } else {
       const finish = () => {
-        setMounted(false);
-        onClosed?.();
+        setShown(false);
+        fallback.current = setTimeout(dismissed, Platform.OS === 'ios' ? 600 : 60);
       };
       t.set(
         withTiming(0, { duration: 200 }, (done) => {
@@ -51,9 +80,7 @@ export function Sheet({ visible, onClose, onClosed, title, children, testID }: S
         }),
       );
     }
-    // onClosed is read when the exit finishes; re-running on its identity would replay the animation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, mounted, reduced, t, drag]);
+  }, [visible, mounted, reduced, t, drag, dismissed]);
 
   const pan = usePanGesture({
     activeOffsetY: [-6, 6],
@@ -80,7 +107,8 @@ export function Sheet({ visible, onClose, onClosed, title, children, testID }: S
   if (!mounted) return null;
   return (
     <Modal
-      visible
+      visible={shown}
+      onDismiss={dismissed}
       transparent
       animationType="none"
       onRequestClose={onClose}

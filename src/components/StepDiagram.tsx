@@ -199,7 +199,8 @@ export const StepDiagram = memo(function StepDiagram({
   const vbW = bounds.maxX - bounds.minX;
   const vbH = bounds.maxY - bounds.minY;
   const viewBox = `${bounds.minX} ${bounds.minY} ${vbW} ${vbH}`;
-  const geometry = size ? fit(size, bounds) : null;
+  // a hidden / collapsing screen can measure 0 × 0: no geometry then (avoids Infinity → NaN paths)
+  const geometry = size && size.width > 0 && size.height > 0 ? fit(size, bounds) : null;
   const labelsVisible =
     mode === 'overview' &&
     (showLabels === true || (showLabels === 'auto' && !!geometry && LABEL_SIZE * geometry.scale >= MIN_LABEL_PX));
@@ -939,9 +940,11 @@ function ArrowGlyph({
   /** units per px (0 = no pixel minimums) */
   unit: number;
 }) {
-  const { a, b } = arrow;
-  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-  const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+  const { a, b, c } = arrow;
+  // a bowed arrow arrives along its control point → tip direction
+  const from = c ?? a;
+  const len = Math.hypot(b.x - from.x, b.y - from.y) || 1;
+  const u = { x: (b.x - from.x) / len, y: (b.y - from.y) / len };
   const sw = strong ? 0.15 : Math.max(0.1, 2.2 * unit);
   const dash = arrow.dashed ? `${Math.max(0.22, sw * 2)} ${Math.max(0.18, sw * 1.8)}` : undefined;
   const head = { stroke: color, strokeWidth: sw, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
@@ -949,7 +952,11 @@ function ArrowGlyph({
   const fs = arrow.label.length > 1 ? (arrow.label.length > 2 ? 0.36 : 0.46) : 0.56;
   return (
     <G>
-      <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="round" />
+      {c ? (
+        <Path d={`M${a.x},${a.y} Q${c.x},${c.y} ${b.x},${b.y}`} stroke={color} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="round" fill="none" />
+      ) : (
+        <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="round" />
+      )}
       <Path d={arrowHead(b, u, Math.max(0.3, sw * 2.6))} {...head} />
       {arrow.type === 'inPlace' && <Path d={arrowHead(a, { x: -u.x, y: -u.y }, Math.max(0.3, sw * 2.6))} {...head} />}
       {showLabel && strong ? (

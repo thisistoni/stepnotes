@@ -59,8 +59,14 @@ function IntroFlow() {
   const finish = useCallback(async () => {
     if (finishing.current) return;
     finishing.current = true;
-    await set({ onboardingDone: true });
-    router.replace('/');
+    try {
+      await set({ onboardingDone: true });
+    } catch {
+      // prefs keep the change in memory even if it could not be written: carry on
+    } finally {
+      finishing.current = false;
+      router.replace('/');
+    }
   }, [set]);
 
   const choose = (c: RoleChoice) => {

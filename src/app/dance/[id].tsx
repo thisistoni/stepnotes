@@ -11,6 +11,7 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useDerivedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DanceNotFound } from '@/components/DanceNotFound';
 import { AboutCard } from '@/components/player/AboutCard';
 import { ChartControls, chartControlsHeight } from '@/components/player/ChartControls';
 import { CountBlock, countBlockHeight, type CountLine } from '@/components/player/CountBlock';
@@ -23,8 +24,6 @@ import { TempoControl } from '@/components/player/TempoControl';
 import { Transport, transportHeight } from '@/components/player/Transport';
 import { usePauseSilence, usePlayerCues } from '@/components/player/usePlayerCues';
 import {
-  EmptyState,
-  FootSticker,
   goBackOrHome,
   Header,
   IconButton,
@@ -37,6 +36,7 @@ import {
   type MenuItem,
 } from '@/components/ui';
 import { barRanges, computeStates, describeStep, describeStepShort, mirrorPattern, stepStartBeats, totalBeats } from '@/lib/pattern';
+import { PersistError } from '@/lib/persist';
 import { usePrefs } from '@/lib/prefs';
 import { useDances } from '@/lib/store';
 import { DEFAULT_FOOT_STYLE, ROLE_COLOR, space, styleColor, TONE } from '@/lib/theme';
@@ -55,23 +55,7 @@ export default function DancePlayerRoute() {
   const dance = get(id) ?? leaving ?? undefined;
 
   if (!ready || !prefsReady) return <Screen header={<Header />} testID="player-loading" />;
-  if (!dance) {
-    return (
-      <Screen header={<Header />} testID="player-not-found" contentStyle={s.notFound}>
-        <EmptyState
-          art={
-            <>
-              <FootSticker size={40} tone={TONE.neutral} rotate={-10} />
-              <FootSticker size={40} foot="R" tone={TONE.neutral} rotate={10} />
-            </>
-          }
-          title="This dance isn't here anymore"
-          body="It may have been deleted. Your other dances are in the library."
-          action={{ label: 'Back to library', icon: 'back', onPress: () => router.replace('/'), testID: 'back-to-library' }}
-        />
-      </Screen>
-    );
-  }
+  if (!dance) return <DanceNotFound testID="player-not-found" />;
   return <DancePlayer key={dance.id} dance={dance} onLeaving={setLeaving} />;
 }
 
@@ -172,10 +156,10 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
   }));
 
   // --- actions ------------------------------------------------------------------------------
-  const { stepTo, pause } = pb;
+  const { stepTo, stepBy, pause } = pb;
   const go = useCallback((i: number) => stepTo(i, { glide: !reduced }), [reduced, stepTo]);
-  const onPrev = useCallback(() => go(Math.max(-1, index - 1)), [go, index]);
-  const onNext = useCallback(() => go(index + 1 >= steps.length ? -1 : index + 1), [go, index, steps.length]);
+  const onPrev = useCallback(() => stepBy(-1, { glide: !reduced }), [reduced, stepBy]);
+  const onNext = useCallback(() => stepBy(1, { glide: !reduced }), [reduced, stepBy]);
   const onJump = useCallback(
     (i: number) => {
       setMode('live');
@@ -218,8 +202,8 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
     try {
       const copy = await duplicate(dance);
       toast.show({ message: 'Copy saved to My dances', icon: 'copy', action: { label: 'Open', onPress: () => router.push(`/dance/${copy.id}`) } });
-    } catch {
-      toast.show({ message: 'Could not copy this dance. Please try again.', icon: 'alert' });
+    } catch (e) {
+      toast.show({ message: e instanceof PersistError ? e.message : 'Could not copy this dance. Please try again.', icon: 'alert' });
     }
   };
   const onDelete = async () => {
@@ -237,11 +221,11 @@ function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance 
       const removed = await remove(dance.id);
       goBackOrHome();
       if (removed) {
-        toast.show({ message: `Deleted “${name}”`, icon: 'trash', action: { label: 'Undo', onPress: () => void restore(removed) } });
+        toast.show({ message: `Deleted “${name}”`, icon: 'trash', action: { label: 'Undo', onPress: () => restore(removed).catch(() => toast.show({ message: 'Could not bring it back. Please try again.', icon: 'alert' })) } });
       }
-    } catch {
+    } catch (e) {
       onLeaving(null);
-      toast.show({ message: 'Could not delete this dance. Please try again.', icon: 'alert' });
+      toast.show({ message: e instanceof PersistError ? e.message : 'Could not delete this dance. Please try again.', icon: 'alert' });
     }
   };
   const menuItems: MenuItem[] = [
@@ -381,7 +365,6 @@ function sameStarts(a: number[], b: number[]) {
 }
 
 const s = StyleSheet.create({
-  notFound: { paddingTop: space.xl },
   roleSeg: { marginTop: space.xs },
   stage: { marginTop: STAGE_MT },
   count: { marginTop: COUNT_MT },

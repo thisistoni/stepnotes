@@ -4,7 +4,7 @@ import type { SharedValue } from 'react-native-reanimated';
 
 import { StepDiagram } from '@/components/StepDiagram';
 import { Icon, Segmented, Stage, Text } from '@/components/ui';
-import { growTo, layoutChart, layoutLive, unionBounds, type Bounds } from '@/lib/chartLayout';
+import { layoutChart, layoutLive, type Bounds } from '@/lib/chartLayout';
 import { barRanges, computeStates, slicePattern } from '@/lib/pattern';
 import { colors, radius, roleTheme, ROLE_COLOR, withAlpha, type ColorSet } from '@/lib/theme';
 import { ROLE_LABEL, type FootStyle, type Pattern, type Role } from '@/lib/types';
@@ -75,23 +75,16 @@ interface Chart {
   bounds: Bounds | undefined;
 }
 
-/** The chart for one bar (or all), with one zoom shared by every bar of this role. */
+/**
+ * The chart for one bar (or all). Each bar is fitted to its own feet, so a bar's chart is as
+ * large as the stage allows (a chart is read, not animated: a zoom change between bars is fine).
+ */
 function chartFor(pattern: Pattern, beatsPerBar: number, chartBar: ChartBar): Chart {
   const bars = barRanges(pattern, beatsPerBar);
   if (chartBar === 'all' || bars.length <= 1) return { pattern, bounds: undefined };
-  const k = bars.findIndex((b) => b.bar === chartBar);
-  if (k < 0) return { pattern, bounds: undefined };
-  const states = computeStates(pattern);
-  const slices = bars.map((b) => slicePattern(pattern, b.from, b.to, states));
-  const boxes = slices.map((p) => layoutChart(p, computeStates(p)).bounds);
-  const u = unionBounds(boxes)!;
-  // same scale for every bar (no zoom jump between bars), each centred on its own feet
-  const own = boxes[k];
-  const w = u.maxX - u.minX;
-  const h = u.maxY - u.minY;
-  const cx = (own.minX + own.maxX) / 2;
-  const cy = (own.minY + own.maxY) / 2;
-  return { pattern: slices[k], bounds: growTo({ minX: cx - w / 2, maxX: cx + w / 2, minY: cy - h / 2, maxY: cy + h / 2 }, 0) };
+  const bar = bars.find((b) => b.bar === chartBar);
+  if (!bar) return { pattern, bounds: undefined };
+  return { pattern: slicePattern(pattern, bar.from, bar.to, computeStates(pattern)), bounds: undefined };
 }
 
 /** Width / height of what a role's diagram will draw (to choose the Both arrangement). */
@@ -201,12 +194,28 @@ export const PlayerStage = memo(function PlayerStage({
     />
   );
 
+  // A chart is width-limited for wide patterns: shrink the tile to what the chart needs (the same
+  // for every bar, so switching bars never changes the layout) instead of leaving empty bands.
+  const chartAspect = useMemo(() => {
+    if (mode !== 'overview' || roles.length !== 1) return 0;
+    const p = roles[0].pattern;
+    const options = [p, ...barRanges(p, beatsPerBar).map((b) => slicePattern(p, b.from, b.to, computeStates(p)))];
+    return Math.max(
+      ...options.map((x) => {
+        const b = layoutChart(x, computeStates(x)).bounds;
+        return (b.maxY - b.minY) / (b.maxX - b.minX);
+      }),
+    );
+  }, [mode, roles, beatsPerBar]);
+
   if (roles.length === 1) {
     const r = roles[0];
+    const innerW = Math.min(winW, 480) - 48 - PAD * 2 - 4;
+    const stageH = chartAspect > 0 ? Math.min(height, Math.max(220, Math.ceil(TOP_INSET_SINGLE + PAD + 8 + innerW * chartAspect))) : height;
     return (
       <Stage
         tone={tone}
-        height={height}
+        height={stageH}
         topLeft={toggle}
         topRight={<FacingTag tone={tone} mirrored={mirrored} compact={narrow} />}
         topInset={TOP_INSET_SINGLE}
@@ -220,7 +229,7 @@ export const PlayerStage = memo(function PlayerStage({
           index={index}
           letters={letters}
           chart={charts[0]}
-          maxHeight={height - TOP_INSET_SINGLE - PAD - 4}
+          maxHeight={stageH - TOP_INSET_SINGLE - PAD - 4}
         />
       </Stage>
     );
@@ -261,8 +270,6 @@ export const PlayerStage = memo(function PlayerStage({
     </View>
   );
 });
-
-export const STAGE_TOOLBAR_H = TOOLBAR_H;
 
 const s = StyleSheet.create({
   facing: {

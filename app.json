@@ -6,9 +6,11 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#FFF8F0",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.stepnotes.app"
+      "bundleIdentifier": "com.stepnotes.app",
+      "backgroundColor": "#FFF8F0"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +20,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.stepnotes.app"
+      "package": "com.stepnotes.app",
+      "userInterfaceStyle": "light"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -27,12 +30,13 @@
     "plugins": [
       "expo-router",
       "expo-font",
+      "expo-system-ui",
       [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
           "imageWidth": 200,
-          "backgroundColor": "#F7F5F2"
+          "backgroundColor": "#FFF8F0"
         }
       ]
     ],

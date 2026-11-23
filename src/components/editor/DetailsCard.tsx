@@ -101,7 +101,7 @@ export function DetailsCard({ draft, expanded, onToggle, onChange, onSeal, video
           returnKeyType="done"
           testID="field-style"
         />
-        <View style={s.chips}>
+        <View style={s.chips} accessibilityRole="radiogroup" accessibilityLabel="Common styles">
           {KNOWN_STYLES.map((st) => (
             <Chip
               key={st}

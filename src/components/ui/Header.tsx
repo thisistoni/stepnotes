@@ -21,10 +21,8 @@ export interface HeaderProps {
   onBack?: () => void;
   /** Right-side actions (IconButtons) */
   right?: ReactNode;
-  /** Large left-aligned title (home screen) instead of a centred one */
+  /** Large title (home screen) instead of the regular one */
   large?: boolean;
-  /** Width reserved on each side so the title stays centred (default 44; use 96 for two right actions) */
-  sideWidth?: number;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -35,7 +33,7 @@ export function goBackOrHome() {
 }
 
 /**
- * Screen header: back/close IconButton, centred title + subtitle, right actions. Never flush to
+ * Screen header: back/close IconButton, title + subtitle (left-aligned, like the player and editor bars), right actions. Never flush to
  * the screen edge (20px inset). `large` gives the home-screen title instead.
  */
 export function Header({
@@ -47,7 +45,6 @@ export function Header({
   onBack,
   right,
   large,
-  sideWidth = 44,
   style,
 }: HeaderProps) {
   if (large) {
@@ -80,10 +77,10 @@ export function Header({
     );
   return (
     <View style={[s.bar, style]}>
-      <View style={[s.side, { width: sideWidth }]}>{back}</View>
+      {back}
       <View style={s.center}>
         {!!title && (
-          <Text variant="heading" align="center" numberOfLines={1} accessibilityRole="header">
+          <Text variant="heading" numberOfLines={1} accessibilityRole="header">
             {title}
           </Text>
         )}
@@ -96,7 +93,7 @@ export function Header({
           </View>
         )}
       </View>
-      <View style={[s.side, s.sideRight, { width: sideWidth }]}>{right}</View>
+      {right && <View style={[s.side, s.sideRight]}>{right}</View>}
     </View>
   );
 }
@@ -105,7 +102,7 @@ const s = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: space.s, paddingBottom: space.s, gap: space.s },
   side: { flexDirection: 'row', gap: space.s },
   sideRight: { justifyContent: 'flex-end' },
-  center: { flex: 1, alignItems: 'center', minWidth: 0 },
+  center: { flex: 1, alignItems: 'flex-start', minWidth: 0, paddingLeft: 4 },
   subRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, maxWidth: '100%' },
   subText: { fontFamily: fonts.body800, flexShrink: 1 },
   dot: { width: 8, height: 8, borderRadius: 3 },

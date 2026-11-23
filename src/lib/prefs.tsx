@@ -1,10 +1,9 @@
 /**
  * User preferences, persisted in AsyncStorage (own key, validated on load, serialised writes).
  *
- *   const { ready, prefs, set, reset } = usePrefs();
+ *   const { ready, prefs, set } = usePrefs();
  *   prefs.speed        // last used tempo multiplier (0.25–2, default 0.75)
  *   set({ loop: false })   // merge a patch; resolves when persisted
- *   reset()            // back to DEFAULT_PREFS
  */
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
 
@@ -61,13 +60,12 @@ interface PrefsStore {
   ready: boolean;
   prefs: Prefs;
   set: (patch: Partial<Prefs>) => Promise<void>;
-  reset: () => Promise<void>;
 }
 
 const Ctx = createContext<PrefsStore | null>(null);
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
-  const { value: prefs, ready, update } = usePersistedValue<Prefs>(PREFS_KEY, DEFAULT_PREFS, sanitizeStored);
+  const { value: prefs, ready, update } = usePersistedValue<Prefs>(PREFS_KEY, DEFAULT_PREFS, sanitizeStored, { optimistic: true });
 
   const set = useCallback(
     (patch: Partial<Prefs>) =>
@@ -78,9 +76,8 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       }),
     [update],
   );
-  const reset = useCallback(() => update(() => [{ ...DEFAULT_PREFS }, undefined]), [update]);
 
-  const value = useMemo(() => ({ ready, prefs, set, reset }), [ready, prefs, set, reset]);
+  const value = useMemo(() => ({ ready, prefs, set }), [ready, prefs, set]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

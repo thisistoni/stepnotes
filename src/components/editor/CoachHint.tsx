@@ -32,8 +32,8 @@ export function coachHint({
     return blocked ? 'Holds can’t move. Switch to Step to place a foot.' : 'A hold: nobody moves on this count.';
   }
   if (dragging) return `Let go where the ${FOOT[step.foot]} foot lands.`;
-  if (step.kind === 'tap') return `Drag or tap where the ${FOOT[step.foot]} foot touches.`;
-  return `Drag or tap to place the ${FOOT[step.foot]} foot.`;
+  if (step.kind === 'tap') return `Drag the ${FOOT[step.foot]} foot, or tap where it touches.`;
+  return `Drag the ${FOOT[step.foot]} foot, or tap where it lands.`;
 }
 
 export function CoachHint({ text, role }: { text: string; role: Role }) {

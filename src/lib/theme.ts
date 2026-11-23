@@ -364,24 +364,6 @@ export function roleTheme(role: Role): RoleTheme {
   return ROLE_THEME[role];
 }
 
-/** Diagram theme in a dance-style colour (library thumbnails). */
-export function styleTheme(c: ColorSet): RoleTheme {
-  return {
-    ...DIAGRAM_NEUTRAL,
-    solid: c.base,
-    solidLip: c.lip,
-    light: c.base,
-    lightLip: c.lip,
-    label: c.deep,
-    arrow: c.lip,
-    activeArrow: c.lip,
-    badge: c.base,
-    letterOnLight: c.on,
-    letterOnSolid: c.on,
-    ghost: withAlpha(P.ink, 0.28),
-  };
-}
-
 export const DEFAULT_FOOT_STYLE: Record<Role, FootStyle> = {
   leader: 'shoe',
   follower: 'heel',

@@ -18,7 +18,7 @@ The strongest first market is probably **teachers → students**. A teacher brin
 3. Do you count "1-2-3, 5-6-7" or "quick-quick-slow"? (The app supports any labels.)
 4. Is the **partner view** important (both dancers in one picture, facing each other) or are separate charts enough?
 5. What would make you pay? Examples: more patterns, sharing with a class, exporting printable PDFs / images for Instagram, or syncing with music.
-6. Is the "weight foot dark, free foot light" convention clear? How do you show taps, pivots and spins on paper today?
+6. Is the "weight foot solid, free foot light" convention clear? How do you show taps, pivots and spins on paper today?
 7. Would you film yourself and want the footprints shown next to the video?
 
 ## Roadmap ideas (rough priority)
@@ -28,8 +28,17 @@ The strongest first market is probably **teachers → students**. A teacher brin
 - Combine figures into a **routine** (basic → cross-body lead → basic …).
 - **Music sync**: play a song and tap along to set the tempo, with a metronome click.
 - Footwork details per step: heel / toe / ball / flat, plus a pivot or spin marker (e.g. a 360° icon).
-- Curved arrows (like the reference images) and arrows for turns.
 - Show both partners in one combined picture, facing each other.
+
+**Deliberately left out of the current redesign** (the app was kept to a small core: a readable step visualization; these are good candidates once that is proven)
+- Practice streaks and practice stats / a progress screen.
+- Favourites.
+- A settings screen (today the player toggles are the only settings, and they are remembered).
+- Count-in before playback starts.
+- Tap tempo (tap along to set the bpm).
+- Personalised onboarding questions (e.g. "I'm learning / I teach / I choreograph", favourite styles).
+- A "Paste" button on the import screen on phones (it needs a clipboard module; today you paste into the field).
+- Redo in the editor (undo exists).
 
 **Later**
 - Accounts, cloud sync, **share by link**, and a teacher "class" space where students see new patterns.
