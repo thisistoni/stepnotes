@@ -3,7 +3,10 @@
  *
  * Layers (bottom → top):
  *   1. StaticLayer  – grid, ghost outlines / chart feet, chart arrows + numbered badges. Memoised
- *                     SVG that only re-renders when the pattern, theme or size changes.
+ *                     SVG that only re-renders when the pattern, theme or size changes. Chart
+ *                     order: feet → every arrow's halo (outline colour) → every arrow → every
+ *                     badge, so an arrow stays legible where it crosses a foot and no arrow is cut
+ *                     by another one's halo; badges are placed clear of all arrows (chartLayout).
  *   2. Live layer   – only in `mode="live"`.
  *        • with `beat` (a Reanimated SharedValue from usePlayback): the FOCUS layer + two animated
  *          feet. The focus layer draws what matters for the current step and nothing else:
@@ -325,6 +328,7 @@ export const StepDiagram = memo(function StepDiagram({
               live={live}
               ghostMode={ghostMode}
               viewBox={viewBox}
+              bounds={bounds}
               theme={theme}
               footStyle={footStyle}
               showLetters={showLetters}
@@ -374,6 +378,8 @@ const StaticLayer = memo(function StaticLayer({
   turns,
 }: StaticLayerProps) {
   const positions = live?.positions ?? layout.feet;
+  const chartStroke = Math.max(0.1, 2.2 * unit);
+  const chartHalo = Math.max(0.045, 1.8 * unit);
   return (
     <Svg width="100%" height="100%" viewBox={viewBox} style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       {grid && <Grid bounds={bounds} theme={theme} />}
@@ -400,9 +406,14 @@ const StaticLayer = memo(function StaticLayer({
           {turns.map((t, i) => (
             <TurnCue key={`t${i}`} at={t.to} turn={t.turn} color={theme.activeArrow} width={Math.max(0.08, 1.8 * unit)} />
           ))}
+          {/* every halo first, then every arrow, then every badge: no arrow is cut by another's halo */}
           {layout.arrows.map((a) => (
-            <ArrowGlyph key={a.key} arrow={a} color={theme.activeArrow} theme={theme} showLabel={showLabels} unit={unit} />
+            <ArrowGlyph key={`h${a.key}`} arrow={a} color={theme.outline} sw={chartStroke} halo={chartHalo} />
           ))}
+          {layout.arrows.map((a) => (
+            <ArrowGlyph key={a.key} arrow={a} color={theme.activeArrow} sw={chartStroke} />
+          ))}
+          {showLabels && layout.arrows.map((a) => <ChartBadge key={`b${a.key}`} arrow={a} theme={theme} />)}
         </G>
       ) : ghostMode === 'focus' ? (
         // context only: every position barely visible, so the eye goes to the focus layer
@@ -508,7 +519,7 @@ const LiveLayer = memo(function LiveLayer({
         />
       ))}
       <Svg width="100%" height="100%" viewBox={viewBox} style={StyleSheet.absoluteFill}>
-        <FocusOver live={live} index={index} theme={theme} unit={unit} />
+        <FocusOver live={live} index={index} theme={theme} unit={unit} bounds={bounds} />
       </Svg>
     </View>
   );
@@ -580,18 +591,28 @@ function FocusUnder({
         />
       )}
       {cur?.turn ? <TurnCue at={cur.to} turn={cur.turn} color={theme.activeArrow} width={Math.max(0.12, 2.8 * unit)} /> : null}
-      {cur?.arrow && <LiveArrowPath step={cur} color={theme.activeArrow} width={arrowW} />}
+      {cur?.arrow && <LiveArrowPath step={cur} color={theme.activeArrow} width={arrowW} unit={unit} />}
     </G>
   );
 }
 
-function FocusOver({ live, index, theme, unit }: { live: LiveLayout; index: number; theme: RoleTheme; unit: number }) {
+function FocusOver({
+  live,
+  index,
+  theme,
+  unit,
+  bounds,
+}: {
+  live: LiveLayout;
+  index: number;
+  theme: RoleTheme;
+  unit: number;
+  bounds: Bounds;
+}) {
   const tapLabel = useT().count.tap.toUpperCase();
   const cur = index >= 0 ? live.steps[index] : null;
   if (!cur?.arrow) return null;
-  // legible on small stages, but never so big it dwarfs the feet
-  const r = Math.min(0.72, Math.max(LIVE_BADGE_R, 12.5 * unit));
-  const { badge } = cur.arrow;
+  const { badge, r } = liveGlyph(cur, unit, bounds);
   const fs = cur.label.length > 1 ? r * (cur.label.length > 2 ? 0.7 : 0.95) : r * 1.2;
   let tag: { x: number; y: number; w: number; h: number } | null = null;
   if (cur.kind === 'tap') {
@@ -642,11 +663,101 @@ function FocusOver({ live, index, theme, unit }: { live: LiveLayout; index: numb
   );
 }
 
-function LiveArrowPath({ step, color, width }: { step: LiveStep; color: string; width: number }) {
+function distToSeg(p: Vec, a: Vec, b: Vec) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+
+/** Shortest current-step arrow on screen (px): below this a closing step is all arrowhead. */
+const LIVE_MIN_ARROW_PX = 26;
+
+/**
+ * The current-step arrow and its badge as drawn at this zoom (`unit` = diagram units per px).
+ * The layout is zoom independent; on a small stage the pixel minimums (stroke, head, badge) grow
+ * relative to it, so here a short arrow is lengthened to LIVE_MIN_ARROW_PX, and a badge that
+ * would cover much of its arrow (or touch a short arrow's head) moves beside it instead.
+ */
+function liveGlyph(step: LiveStep, unit: number, bounds?: Bounds) {
   const ar = step.arrow!;
-  const { a, b } = ar;
+  const width = Math.max(0.16, 3.4 * unit);
+  const head = Math.max(0.34, width * 2.3);
+  // legible on small stages, but never so big it dwarfs the feet
+  const r = Math.min(0.72, Math.max(LIVE_BADGE_R, 12.5 * unit));
+  let { a, b, badge } = ar;
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
   const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+  // The layout keeps the arrow clear of the feet for the smallest head and stroke; when the pixel
+  // minimums make them wider, move the arrow (and its badge) out by the difference.
+  const grow = Math.max(0, head * 0.8 + width / 2 - (0.34 * 0.8 + 0.16 / 2));
+  if (grow > 0.005) {
+    const path = { x: (step.from.x + step.to.x) / 2, y: (step.from.y + step.to.y) / 2 };
+    const n = { x: -u.y, y: u.x };
+    const s = Math.sign(n.x * ((a.x + b.x) / 2 - path.x) + n.y * ((a.y + b.y) / 2 - path.y)) || 1;
+    const o = { x: n.x * s * grow, y: n.y * s * grow };
+    a = { x: a.x + o.x, y: a.y + o.y };
+    b = { x: b.x + o.x, y: b.y + o.y };
+    badge = { x: badge.x + o.x, y: badge.y + o.y };
+  }
+  if (ar.type === 'move') {
+    const min = LIVE_MIN_ARROW_PX * unit;
+    if (len < min) {
+      const e = (min - len) / 2;
+      a = { x: a.x - u.x * e, y: a.y - u.y * e };
+      b = { x: b.x + u.x * e, y: b.y + u.y * e };
+    }
+    // the layout puts the badge on a long arrow and beside a short one; on screen it must leave
+    // most of the arrow and all of its head visible
+    const besideAlready = len < LIVE_BADGE_R * 2 + 1.2;
+    if (besideAlready || step.closing || 2 * r > 0.4 * Math.max(len, min)) {
+      const t = Math.max(0, Math.min(1, ((badge.x - a.x) * (b.x - a.x) + (badge.y - a.y) * (b.y - a.y)) / Math.max(min, len) ** 2));
+      const near = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      let side = { x: badge.x - near.x, y: badge.y - near.y };
+      let d = Math.hypot(side.x, side.y);
+      if (d < 0.05) {
+        // on the arrow: move to the side away from the foot's own path (outside the body)
+        const path = { x: (step.from.x + step.to.x) / 2, y: (step.from.y + step.to.y) / 2 };
+        const n = { x: -u.y, y: u.x };
+        const s = Math.sign(n.x * (near.x - path.x) + n.y * (near.y - path.y)) || 1;
+        side = { x: n.x * s, y: n.y * s };
+        d = 0;
+      } else {
+        side = { x: side.x / d, y: side.y / d };
+      }
+      // clear of the shaft and of both strokes of the head
+      const n = { x: -u.y, y: u.x };
+      const back = { x: b.x - u.x * head, y: b.y - u.y * head };
+      const segs: [Vec, Vec][] = [
+        [a, b],
+        [b, { x: back.x + n.x * head * 0.8, y: back.y + n.y * head * 0.8 }],
+        [b, { x: back.x - n.x * head * 0.8, y: back.y - n.y * head * 0.8 }],
+      ];
+      const need = r + width / 2 + 0.04;
+      const clearance = (p: Vec) => Math.min(...segs.map(([p1, p2]) => distToSeg(p, p1, p2))) - need;
+      for (let k = 0; k < 40 && clearance(badge) < 0; k++) badge = { x: near.x + side.x * (d + 0.05 * (k + 1)), y: near.y + side.y * (d + 0.05 * (k + 1)) };
+      // still inside the drawing (the editor's canvas is fixed): else the other side of the arrow,
+      // or just before its tail / beyond its head
+      const inside = (p: Vec) =>
+        !bounds || (p.x - r >= bounds.minX && p.x + r <= bounds.maxX && p.y - r >= bounds.minY && p.y + r <= bounds.maxY);
+      if (!inside(badge)) {
+        const away = need + 0.02;
+        const alt = [
+          { x: near.x - side.x * Math.max(d, away), y: near.y - side.y * Math.max(d, away) },
+          { x: a.x - u.x * away, y: a.y - u.y * away },
+          { x: b.x + u.x * (away + head * 0.3), y: b.y + u.y * (away + head * 0.3) },
+        ].find((p) => inside(p) && clearance(p) >= 0);
+        if (alt) badge = alt;
+      }
+    }
+  }
+  return { a, b, u, badge, r, width, head };
+}
+
+function LiveArrowPath({ step, color, width, unit }: { step: LiveStep; color: string; width: number; unit: number }) {
+  const ar = step.arrow!;
+  const { a, b, u } = liveGlyph(step, unit);
   const head = Math.max(0.34, width * 2.3);
   const dash = ar.dashed ? `${width * 1.6} ${width * 1.7}` : undefined;
   const hs = { stroke: color, strokeWidth: width, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
@@ -847,6 +958,7 @@ const StaticPose = memo(function StaticPose({
   live,
   ghostMode,
   viewBox,
+  bounds,
   theme,
   footStyle,
   showLetters,
@@ -857,6 +969,7 @@ const StaticPose = memo(function StaticPose({
   live: LiveLayout;
   ghostMode: 'focus' | 'all';
   viewBox: string;
+  bounds: Bounds;
   theme: RoleTheme;
   footStyle: FootStyle;
   showLetters: boolean;
@@ -908,7 +1021,7 @@ const StaticPose = memo(function StaticPose({
           />
         );
       })}
-      <FocusOver live={live} index={index} theme={theme} unit={unit} />
+      <FocusOver live={live} index={index} theme={theme} unit={unit} bounds={bounds} />
     </Svg>
   );
 });
@@ -922,74 +1035,54 @@ function arrowHead(tip: Vec, dir: Vec, size = 0.32) {
   return `M${l.x},${l.y} L${tip.x},${tip.y} L${r.x},${r.y}`;
 }
 
+/** Path data of a chart arrow's stroke: straight, quadratic (bow) or cubic (bridge). */
+function arrowPath({ a, b, c, c2 }: ChartArrow) {
+  if (c && c2) return `M${a.x},${a.y} C${c.x},${c.y} ${c2.x},${c2.y} ${b.x},${b.y}`;
+  if (c) return `M${a.x},${a.y} Q${c.x},${c.y} ${b.x},${b.y}`;
+  return `M${a.x},${a.y} L${b.x},${b.y}`;
+}
+
 /**
- * A chart arrow (printed view) or the editor's current-step arrow (`strong`). Chart numbers sit in
- * small white badges with a role-coloured ring so each reads as a sticker attached to its arrow.
+ * A chart arrow (printed view): the stroke and its head(s). Drawn twice: first every arrow as a
+ * `halo` (a slightly wider stroke in the sticker-outline colour, so an arrow stays legible where
+ * it crosses a foot or another arrow), then every arrow in its colour on top.
  */
-function ArrowGlyph({
-  arrow,
-  color,
-  theme,
-  strong,
-  showLabel,
-  unit,
-}: {
-  arrow: ChartArrow;
-  color: string;
-  theme: RoleTheme;
-  strong?: boolean;
-  showLabel: boolean;
-  /** units per px (0 = no pixel minimums) */
-  unit: number;
-}) {
-  const { a, b, c } = arrow;
-  // a bowed arrow arrives along its control point → tip direction
-  const from = c ?? a;
+function ArrowGlyph({ arrow, color, sw, halo }: { arrow: ChartArrow; color: string; sw: number; halo?: number }) {
+  const { a, b, c, c2 } = arrow;
+  // a curved arrow arrives along its (last) control point → tip direction
+  const from = c2 ?? c ?? a;
   const len = Math.hypot(b.x - from.x, b.y - from.y) || 1;
   const u = { x: (b.x - from.x) / len, y: (b.y - from.y) / len };
-  const sw = strong ? 0.15 : Math.max(0.1, 2.2 * unit);
-  const dash = arrow.dashed ? `${Math.max(0.22, sw * 2)} ${Math.max(0.18, sw * 1.8)}` : undefined;
-  const head = { stroke: color, strokeWidth: sw, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+  const width = halo ? sw + 2 * halo : sw;
+  const dash = arrow.dashed && !halo ? `${Math.max(0.22, sw * 2)} ${Math.max(0.18, sw * 1.8)}` : undefined;
+  const line = { stroke: color, strokeWidth: width, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+  const head = Math.max(0.3, sw * 2.6);
+  return (
+    <G>
+      <Path d={arrowPath(arrow)} {...line} strokeDasharray={dash} />
+      <Path d={arrowHead(b, u, head)} {...line} />
+      {arrow.type === 'inPlace' && <Path d={arrowHead(a, { x: -u.x, y: -u.y }, head)} {...line} />}
+    </G>
+  );
+}
+
+/** Chart step number: a small white badge with a role-coloured ring, a sticker beside its arrow. */
+function ChartBadge({ arrow, theme }: { arrow: ChartArrow; theme: RoleTheme }) {
   const r = LABEL_SIZE * 0.5;
   const fs = arrow.label.length > 1 ? (arrow.label.length > 2 ? 0.36 : 0.46) : 0.56;
   return (
     <G>
-      {c ? (
-        <Path d={`M${a.x},${a.y} Q${c.x},${c.y} ${b.x},${b.y}`} stroke={color} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="round" fill="none" />
-      ) : (
-        <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="round" />
-      )}
-      <Path d={arrowHead(b, u, Math.max(0.3, sw * 2.6))} {...head} />
-      {arrow.type === 'inPlace' && <Path d={arrowHead(a, { x: -u.x, y: -u.y }, Math.max(0.3, sw * 2.6))} {...head} />}
-      {showLabel && strong ? (
-        <G>
-          <Circle cx={arrow.labelAt.x} cy={arrow.labelAt.y} r={0.44} fill={theme.badge} stroke={theme.outline} strokeWidth={0.1} />
-          <SvgText
-            x={arrow.labelAt.x}
-            y={arrow.labelAt.y + 0.19}
-            fontSize={arrow.label.length > 1 ? 0.4 : 0.54}
-            fontFamily={SVG_FONT}
-            fill={theme.badgeText}
-            textAnchor="middle"
-          >
-            {arrow.label}
-          </SvgText>
-        </G>
-      ) : showLabel ? (
-        <G>
-          <Circle cx={arrow.labelAt.x} cy={arrow.labelAt.y} r={r - 0.02} fill={theme.outline} stroke={theme.label} strokeWidth={0.07} />
-          <SvgText
-            x={arrow.labelAt.x}
-            y={arrow.labelAt.y + fs * 0.36}
-            fontSize={fs}
-            fontFamily={SVG_FONT_MEDIUM}
-            fill={theme.label}
-            textAnchor="middle"
-          >
-            {arrow.label}
-          </SvgText>
-        </G>
-      ) : null}
+      <Circle cx={arrow.labelAt.x} cy={arrow.labelAt.y} r={r - 0.02} fill={theme.outline} stroke={theme.label} strokeWidth={0.07} />
+      <SvgText
+        x={arrow.labelAt.x}
+        y={arrow.labelAt.y + fs * 0.36}
+        fontSize={fs}
+        fontFamily={SVG_FONT_MEDIUM}
+        fill={theme.label}
+        textAnchor="middle"
+      >
+        {arrow.label}
+      </SvgText>
     </G>
   );
 }
