@@ -1,0 +1,91 @@
+/**
+ * User preferences, persisted in AsyncStorage (own key, validated on load, serialised writes).
+ *
+ *   const { ready, prefs, set, reset } = usePrefs();
+ *   prefs.speed        // last used tempo multiplier (0.25–2, default 0.75)
+ *   set({ loop: false })   // merge a patch; resolves when persisted
+ *   reset()            // back to DEFAULT_PREFS
+ */
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
+
+import { usePersistedValue } from './persist';
+import type { Role } from './types';
+
+export const PREFS_KEY = 'stepnotes.prefs.v1';
+
+export interface Prefs {
+  onboardingDone: boolean;
+  /** Role shown first in the player and editor */
+  preferredRole: Role;
+  /** Last used tempo multiplier (1 = the dance's own bpm) */
+  speed: number;
+  loop: boolean;
+  /** Vibrate on every step (native only) */
+  haptics: boolean;
+  speakCounts: boolean;
+  /** Show L / R on the footprints */
+  showLetters: boolean;
+}
+
+export const DEFAULT_PREFS: Prefs = {
+  onboardingDone: false,
+  preferredRole: 'leader',
+  speed: 0.75,
+  loop: true,
+  haptics: true,
+  speakCounts: false,
+  showLetters: true,
+};
+
+export const SPEED_RANGE = [0.25, 2] as const;
+
+const BOOL_KEYS = ['onboardingDone', 'loop', 'haptics', 'speakCounts', 'showLetters'] as const;
+
+/** Validate a stored/patched prefs object; unknown keys and bad values fall back to defaults. */
+export function sanitizePrefs(raw: unknown, base: Prefs = DEFAULT_PREFS): Prefs {
+  const out: Prefs = { ...base };
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return out;
+  const r = raw as Record<string, unknown>;
+  for (const k of BOOL_KEYS) if (typeof r[k] === 'boolean') out[k] = r[k] as boolean;
+  if (r.preferredRole === 'leader' || r.preferredRole === 'follower') out.preferredRole = r.preferredRole;
+  if (typeof r.speed === 'number' && Number.isFinite(r.speed)) {
+    out.speed = Math.min(SPEED_RANGE[1], Math.max(SPEED_RANGE[0], r.speed));
+  }
+  return out;
+}
+
+const sanitizeStored = (raw: unknown) => sanitizePrefs(raw);
+
+interface PrefsStore {
+  /** false until stored prefs were read; `prefs` holds the defaults until then */
+  ready: boolean;
+  prefs: Prefs;
+  set: (patch: Partial<Prefs>) => Promise<void>;
+  reset: () => Promise<void>;
+}
+
+const Ctx = createContext<PrefsStore | null>(null);
+
+export function PrefsProvider({ children }: { children: ReactNode }) {
+  const { value: prefs, ready, update } = usePersistedValue<Prefs>(PREFS_KEY, DEFAULT_PREFS, sanitizeStored);
+
+  const set = useCallback(
+    (patch: Partial<Prefs>) =>
+      update((cur) => {
+        const next = sanitizePrefs(patch, cur);
+        const changed = (Object.keys(next) as (keyof Prefs)[]).some((k) => next[k] !== cur[k]);
+        return [changed ? next : cur, undefined];
+      }),
+    [update],
+  );
+  const reset = useCallback(() => update(() => [{ ...DEFAULT_PREFS }, undefined]), [update]);
+
+  const value = useMemo(() => ({ ready, prefs, set, reset }), [ready, prefs, set, reset]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function usePrefs() {
+  const ctx = useContext(Ctx);
+  if (!ctx) throw new Error('usePrefs must be used inside <PrefsProvider>');
+  return ctx;
+}
