@@ -334,6 +334,7 @@ export const de: Strings = {
     keepEditing: 'Weiter bearbeiten',
     rotateLeft: 'Fuß um 15 Grad nach links drehen',
     rotateRight: 'Fuß um 15 Grad nach rechts drehen',
+    recenter: 'Alle Schritte zeigen',
   },
 
   details: {
@@ -421,8 +422,13 @@ export const de: Strings = {
     holdBlocked: 'Beim Halten bewegt sich nichts – wähl dafür „Schritt“.',
     hold: 'Halten: Auf dieser Zählzeit bewegt sich niemand.',
     dragging: (foot: Foot) => `Lass dort los, wo der ${ADJ[foot].slice(0, -1)} Fuß landen soll.`,
-    tap: (foot: Foot) => `Zieh den ${ADJ[foot]} Fuß oder tipp, wo er auftippt.`,
-    step: (foot: Foot) => `Zieh den ${ADJ[foot]} Fuß oder tipp, wo er landet.`,
+    tap: (foot: Foot) => `Zieh den ${ADJ[foot]} Fuß dorthin, wo er auftippt.`,
+    step: (foot: Foot) => `Zieh den ${ADJ[foot]} Fuß dorthin, wo er landet.`,
+    rotating: 'Die Zehen zeigen zu deinem Finger.',
+    panning: 'Das Fadenkreuz holt alle Schritte zurück.',
+    holdTip: 'Fuß gedrückt halten: drehen',
+    panTip: 'Boden ziehen: verschieben',
+    edgeTip: 'Mehr Platz? Zieh über den Boden',
   },
 
   import: {

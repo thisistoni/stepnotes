@@ -21,7 +21,7 @@ A mobile app (iOS and Android, built with Expo / React Native) for **learning an
   - Leader, Follower or **Both** side by side, in sync.
   - Tempo 50–125 %, loop, spoken counts, mirror mode, L / R letters, and vibration on each step (phones only).
   - Duplicate, share as text, delete (with undo).
-- **Editor**: drag the feet on a grid (or tap to place), rotate in 15° steps, and set each step's count, length (½ / 1 / 2 beats), foot, action (step, tap, hold) and a note. Generate the follower part as a mirror of the leader, then adjust it. Undo for every change. "Make my own version" of a starter dance opens the editor on a copy that is only saved when you press Save.
+- **Editor**: drag the feet on a grid, press and hold a foot to turn it (the toes follow your finger, in 15° steps; the ±15° buttons do the same), drag the empty floor to move the view (the crosshair shows everything again), and set each step's count, length (½ / 1 / 2 beats), foot, action (step, tap, hold) and a note. Generate the follower part as a mirror of the leader, then adjust it. Undo for every change. "Make my own version" of a starter dance opens the editor on a copy that is only saved when you press Save.
 - **Import**: paste a dance someone shared (extra chat text around it is fine).
 - Everything is stored on the device. There are no accounts and no server.
 - **Languages**: German (the default for now) and English. Switch with the globe button in the library header, or with DE | EN on the first intro screen. The choice is saved with the other settings.

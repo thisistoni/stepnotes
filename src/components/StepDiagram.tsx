@@ -106,10 +106,25 @@ export interface StepDiagramProps {
   bounds?: Bounds;
   /** Draw a background grid (editor). */
   grid?: boolean;
-  /** Called with diagram coordinates while the user touches / drags the canvas. */
-  onTouch?: (x: number, y: number) => void;
+  /**
+   * Called with diagram coordinates while the user touches / drags the canvas. `info` adds the
+   * point in local pixels, the current pixels-per-unit scale and how many fingers are down (so the
+   * editor can pan in screen space and ignore a second finger).
+   */
+  onTouch?: (x: number, y: number, info: TouchInfo) => void;
   onTouchEnd?: () => void;
   testID?: string;
+}
+
+/** Extra data for `onTouch` (editor). */
+export interface TouchInfo {
+  /** touch point in pixels from the diagram's top-left corner */
+  px: number;
+  py: number;
+  /** pixels per diagram unit */
+  scale: number;
+  /** fingers currently down (1 for a mouse) */
+  touches: number;
 }
 
 /** Bounds of just the feet positions (used by the editor). */
@@ -216,7 +231,7 @@ export const StepDiagram = memo(function StepDiagram({
   const containerRef = useRef<ComponentRef<typeof View>>(null);
   const origin = useRef({ x: 0, y: 0 });
   /** Set while the grant's measure() is pending: the latest move and whether the touch ended. */
-  const held = useRef<{ move: { x: number; y: number } | null; ended: boolean } | null>(null);
+  const held = useRef<{ move: { x: number; y: number; n: number } | null; ended: boolean } | null>(null);
   const geom = useRef({ size, bounds });
   const onTouchRef = useRef(onTouch);
   const onTouchEndRef = useRef(onTouchEnd);
@@ -229,13 +244,13 @@ export const StepDiagram = memo(function StepDiagram({
   // The refs are only read inside the gesture callbacks, never during render.
   // eslint-disable-next-line react-hooks/refs
   const [responder] = useState(() => {
-    const emit = (pageX: number, pageY: number) => {
+    const emit = (pageX: number, pageY: number, touches = 1) => {
       const { size: sz, bounds: b } = geom.current;
       if (!sz) return;
       const { scale, ox, oy } = fit(sz, b);
       const lx = pageX - origin.current.x;
       const ly = pageY - origin.current.y;
-      onTouchRef.current?.(b.minX + (lx - ox) / scale, b.minY + (ly - oy) / scale);
+      onTouchRef.current?.(b.minX + (lx - ox) / scale, b.minY + (ly - oy) / scale, { px: lx, py: ly, scale, touches });
     };
     return PanResponder.create({
       onStartShouldSetPanResponder: () => !!onTouchRef.current,
@@ -245,19 +260,20 @@ export const StepDiagram = memo(function StepDiagram({
         const { pageX, pageY } = e.nativeEvent;
         // measure() can be async (web): hold back moves / the release until the grant point is
         // out, so the editor receives the touch in order (first point, moves, end).
-        const pending: { move: { x: number; y: number } | null; ended: boolean } = { move: null, ended: false };
+        const pending: { move: { x: number; y: number; n: number } | null; ended: boolean } = { move: null, ended: false };
         held.current = pending;
         containerRef.current?.measure((_x, _y, _w, _h, px, py) => {
           origin.current = { x: px, y: py };
           held.current = null;
           emit(pageX, pageY);
-          if (pending.move) emit(pending.move.x, pending.move.y);
+          if (pending.move) emit(pending.move.x, pending.move.y, pending.move.n);
           if (pending.ended) onTouchEndRef.current?.();
         });
       },
-      onPanResponderMove: (e) => {
-        if (held.current) held.current.move = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
-        else emit(e.nativeEvent.pageX, e.nativeEvent.pageY);
+      onPanResponderMove: (e, gs) => {
+        const n = Math.max(1, gs.numberActiveTouches);
+        if (held.current) held.current.move = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, n };
+        else emit(e.nativeEvent.pageX, e.nativeEvent.pageY, n);
       },
       onPanResponderRelease: () => {
         if (held.current) held.current.ended = true;

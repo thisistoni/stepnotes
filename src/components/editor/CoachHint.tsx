@@ -13,6 +13,7 @@ export function coachHint(
     stepCount,
     startFoot,
     dragging,
+    canvasMode = null,
     blocked,
   }: {
     sel: number;
@@ -20,11 +21,15 @@ export function coachHint(
     stepCount: number;
     startFoot: Foot;
     dragging: boolean;
+    /** what the finger on the canvas is doing right now */
+    canvasMode?: 'drag' | 'rotate' | 'pan' | null;
     blocked: boolean;
   },
   t: Strings,
 ): string {
   const c = t.coach;
+  if (canvasMode === 'pan') return c.panning;
+  if (canvasMode === 'rotate') return c.rotating;
   if (sel < 0) {
     if (dragging) return c.startDragging(startFoot);
     if (stepCount === 0) return c.startEmpty;
