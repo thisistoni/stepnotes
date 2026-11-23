@@ -1,26 +1,52 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { PanResponder, Platform, View, type LayoutChangeEvent } from 'react-native';
+/**
+ * The footprint diagram: printed-style chart, animated player view and editor canvas.
+ *
+ * Layers (bottom → top):
+ *   1. StaticLayer  – grid, ghost outlines / chart feet, chart arrows + labels. Memoised SVG that
+ *                     only re-renders when the pattern, theme or size changes, never during playback.
+ *   2. Live layer   – the current step's arrow and the two feet.
+ *        • with `beat` (a Reanimated SharedValue from usePlayback): each foot is an absolutely
+ *          positioned Animated.View holding a small static foot SVG; position/rotation are
+ *          transform styles and the weight change is an opacity cross-fade, all computed on the
+ *          UI thread from a precomputed timeline (no React renders per frame). The arrow layer
+ *          re-renders once per step.
+ *        • with `frame` (a fixed pose, e.g. the editor) or nothing: drawn statically.
+ *
+ * Height is reserved from the first frame via `aspectRatio` (from the bounds), so there is no
+ * layout jump when the width becomes known. All colours come from `theme`.
+ */
+import { memo, useDeferredValue, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import Animated, { useAnimatedReaction, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import Svg, { G, Line, Path, Text as SvgText } from 'react-native-svg';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { growTo, layoutChart, LABEL_SIZE, type Bounds, type ChartArrow, type ChartLayout, type Vec } from '@/lib/chartLayout';
-import { computeStates, type Frame } from '@/lib/pattern';
-import { colors, type RoleTheme } from '@/lib/theme';
+import { buildTimeline, computeStates, footPoseAt, stepIndexAt, type Frame, type Timeline } from '@/lib/pattern';
+import type { RoleTheme } from '@/lib/theme';
 import type { Foot, FootPos, FootStyle, Pattern } from '@/lib/types';
 
-import { FootShape } from './FootShape';
+import { FOOT_BOX, FootShape, SVG_FONT } from './FootShape';
 
 export type { Bounds };
+export { SVG_FONT };
 
-export const SVG_FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' : undefined;
+/** Labels smaller than this (on screen) are hidden when `showLabels="auto"` (tiny thumbnails). */
+export const MIN_LABEL_PX = 11;
 
-interface Props {
+export interface StepDiagramProps {
   pattern: Pattern;
   theme: RoleTheme;
   footStyle: FootStyle;
-  /** overview = every step numbered (like a printed chart); live = animated current state */
+  /** overview = every step numbered (like a printed chart); live = current state of the feet */
   mode: 'overview' | 'live';
+  /** live mode: animate from this beat clock (`usePlayback().beat`) */
+  beat?: SharedValue<number>;
+  /** live mode without `beat`: a fixed pose to draw (the editor). Default: start position. */
   frame?: Frame;
   showLetters?: boolean;
+  /** Chart step numbers. 'auto' (default) hides them when they would be too small to read. */
+  showLabels?: boolean | 'auto';
   maxHeight?: number;
   /** Fixed bounds (the editor uses this so the canvas does not re-zoom while dragging). */
   bounds?: Bounds;
@@ -45,34 +71,64 @@ export function patternBounds(pattern: Pattern, pad = 2.2, minSize = 7): Bounds 
   );
 }
 
-export function StepDiagram({
+interface Size {
+  width: number;
+  height: number;
+}
+
+/** How the viewBox maps into the view (SVG default preserveAspectRatio="xMidYMid meet"). */
+function fit(size: Size, b: Bounds) {
+  const bw = b.maxX - b.minX;
+  const bh = b.maxY - b.minY;
+  const scale = Math.min(size.width / bw, size.height / bh);
+  return { scale, ox: (size.width - bw * scale) / 2, oy: (size.height - bh * scale) / 2 };
+}
+
+export const StepDiagram = memo(function StepDiagram({
   pattern,
   theme,
   footStyle,
   mode,
+  beat,
   frame,
   showLetters = true,
+  showLabels = 'auto',
   maxHeight = 420,
   bounds: fixedBounds,
   grid,
   onTouch,
   onTouchEnd,
-}: Props) {
-  const [width, setWidth] = useState(0);
-  const layout = useMemo(() => layoutChart(pattern, computeStates(pattern)), [pattern]);
+}: StepDiagramProps) {
+  const [size, setSize] = useState<Size | null>(null);
+
+  // While dragging in the editor the pattern changes on every snapped move; the chart layout
+  // (ghosts + arrows) may lag a frame behind so the dragged foot itself stays responsive.
+  const layoutPattern = useDeferredValue(pattern);
+  // The live editor canvas (fixed bounds) never shows labels: skip placing them.
+  const needLabels = !(mode === 'live' && fixedBounds);
+  const layout = useMemo(
+    () => layoutChart(layoutPattern, computeStates(layoutPattern), { labels: needLabels }),
+    [layoutPattern, needLabels],
+  );
+  const timeline = useMemo(() => (beat ? buildTimeline(pattern) : null), [beat, pattern]);
+
   const bounds = fixedBounds ?? layout.bounds;
   const vbW = bounds.maxX - bounds.minX;
   const vbH = bounds.maxY - bounds.minY;
-  const height = width ? Math.min(maxHeight, (width * vbH) / vbW) : 0;
+  const viewBox = `${bounds.minX} ${bounds.minY} ${vbW} ${vbH}`;
+  const geometry = size ? fit(size, bounds) : null;
+  const labelsVisible =
+    mode === 'overview' &&
+    (showLabels === true || (showLabels === 'auto' && !!geometry && LABEL_SIZE * geometry.scale >= MIN_LABEL_PX));
 
   // --- touch handling (editor) --------------------------------------------------------
   const containerRef = useRef<ComponentRef<typeof View>>(null);
   const origin = useRef({ x: 0, y: 0 });
-  const geom = useRef({ width, height, bounds });
+  const geom = useRef({ size, bounds });
   const onTouchRef = useRef(onTouch);
   const onTouchEndRef = useRef(onTouchEnd);
   useLayoutEffect(() => {
-    geom.current = { width, height, bounds };
+    geom.current = { size, bounds };
     onTouchRef.current = onTouch;
     onTouchEndRef.current = onTouchEnd;
   });
@@ -81,12 +137,9 @@ export function StepDiagram({
   // eslint-disable-next-line react-hooks/refs
   const [responder] = useState(() => {
     const emit = (pageX: number, pageY: number) => {
-      const { width: w, height: h, bounds: b } = geom.current;
-      const bw = b.maxX - b.minX;
-      const bh = b.maxY - b.minY;
-      const scale = Math.min(w / bw, h / bh);
-      const ox = (w - bw * scale) / 2;
-      const oy = (h - bh * scale) / 2;
+      const { size: sz, bounds: b } = geom.current;
+      if (!sz) return;
+      const { scale, ox, oy } = fit(sz, b);
       const lx = pageX - origin.current.x;
       const ly = pageY - origin.current.y;
       onTouchRef.current?.(b.minX + (lx - ox) / scale, b.minY + (ly - oy) / scale);
@@ -109,90 +162,279 @@ export function StepDiagram({
   });
 
   const onLayout = (e: LayoutChangeEvent) => {
-    setWidth(e.nativeEvent.layout.width);
-    containerRef.current?.measure((_x, _y, _w, _h, px, py) => {
-      origin.current = { x: px, y: py };
-    });
+    const { width, height } = e.nativeEvent.layout;
+    setSize((s) => (s && s.width === width && s.height === height ? s : { width, height }));
+    if (onTouch) {
+      containerRef.current?.measure((_x, _y, _w, _h, px, py) => {
+        origin.current = { x: px, y: py };
+      });
+    }
   };
 
   return (
     <View
       ref={containerRef}
       onLayout={onLayout}
-      style={{ width: '100%', height: height || 200 }}
+      style={{ width: '100%', aspectRatio: vbW / vbH, maxHeight }}
       {...(onTouch ? responder.panHandlers : {})}
     >
-      {width > 0 && (
-        <Svg width={width} height={height} viewBox={`${bounds.minX} ${bounds.minY} ${vbW} ${vbH}`}>
-          {grid && <Grid bounds={bounds} />}
-          {mode === 'overview' ? (
-            <Overview layout={layout} theme={theme} footStyle={footStyle} showLetters={showLetters} />
-          ) : (
-            <Live
-              layout={layout}
-              theme={theme}
-              footStyle={footStyle}
-              showLetters={showLetters}
-              frame={frame ?? { index: -1, feet: pattern.start, weight: null, progress: 1 }}
-            />
-          )}
-        </Svg>
-      )}
+      <StaticLayer
+        layout={layout}
+        viewBox={viewBox}
+        bounds={bounds}
+        theme={theme}
+        footStyle={footStyle}
+        mode={mode}
+        grid={!!grid}
+        showLetters={showLetters}
+        showLabels={labelsVisible}
+      />
+      {mode === 'live' &&
+        (beat && timeline ? (
+          geometry && (
+            <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+              <LiveArrow layout={layout} timeline={timeline} beat={beat} viewBox={viewBox} theme={theme} showLabel={needLabels} />
+              {(['L', 'R'] as Foot[]).map((f) => (
+                <AnimatedFoot
+                  key={f}
+                  foot={f}
+                  timeline={timeline}
+                  beat={beat}
+                  bounds={bounds}
+                  geometry={geometry}
+                  theme={theme}
+                  footStyle={footStyle}
+                  showLetters={showLetters}
+                />
+              ))}
+            </View>
+          )
+        ) : (
+          <StaticPose
+            layout={layout}
+            viewBox={viewBox}
+            theme={theme}
+            footStyle={footStyle}
+            showLetters={showLetters}
+            showLabel={needLabels}
+            frame={frame ?? { index: -1, feet: pattern.start, weight: null, progress: 1 }}
+          />
+        ))}
     </View>
   );
+});
+
+// --- static layer --------------------------------------------------------------------------
+
+interface StaticLayerProps {
+  layout: ChartLayout;
+  viewBox: string;
+  bounds: Bounds;
+  theme: RoleTheme;
+  footStyle: FootStyle;
+  mode: 'overview' | 'live';
+  grid: boolean;
+  showLetters: boolean;
+  showLabels: boolean;
 }
 
-interface DrawProps {
+const StaticLayer = memo(function StaticLayer({
+  layout,
+  viewBox,
+  bounds,
+  theme,
+  footStyle,
+  mode,
+  grid,
+  showLetters,
+  showLabels,
+}: StaticLayerProps) {
+  return (
+    <Svg width="100%" height="100%" viewBox={viewBox} style={StyleSheet.absoluteFill}>
+      {grid && <Grid bounds={bounds} theme={theme} />}
+      {mode === 'overview' ? (
+        <G>
+          {layout.feet.map((p, i) => (
+            <FootShape
+              key={`f${i}`}
+              foot={p.foot}
+              pos={p.pos}
+              style={footStyle}
+              color={p.isStart ? theme.solid : theme.light}
+              letterColor={p.isStart ? theme.letterOnSolid : theme.letterOnLight}
+              outline={p.isTap}
+              showLetter={showLetters}
+            />
+          ))}
+          {layout.arrows.map((a) => (
+            <ArrowGlyph key={a.key} arrow={a} color={theme.arrow} labelColor={theme.label} showLabel={showLabels} />
+          ))}
+        </G>
+      ) : (
+        <G>
+          {layout.feet.map((p, i) => (
+            <FootShape key={`g${i}`} foot={p.foot} pos={p.pos} style={footStyle} color={theme.ghost} outline />
+          ))}
+        </G>
+      )}
+    </Svg>
+  );
+});
+
+// --- live layer: animated --------------------------------------------------------------------
+
+/** The current step's arrow. Re-renders only when the step index changes. */
+const LiveArrow = memo(function LiveArrow({
+  layout,
+  timeline,
+  beat,
+  viewBox,
+  theme,
+  showLabel,
+}: {
   layout: ChartLayout;
+  timeline: Timeline;
+  beat: SharedValue<number>;
+  viewBox: string;
+  theme: RoleTheme;
+  showLabel: boolean;
+}) {
+  const [index, setIndex] = useState(-1);
+  useAnimatedReaction(
+    () => stepIndexAt(timeline.starts, timeline.total, beat.get()),
+    (i, prev) => {
+      if (i !== prev) scheduleOnRN(setIndex, i);
+    },
+    [timeline],
+  );
+  const current = layout.arrows.find((a) => a.index === index);
+  if (!current) return null;
+  return (
+    <Svg width="100%" height="100%" viewBox={viewBox} style={StyleSheet.absoluteFill}>
+      <ArrowGlyph arrow={current} color={theme.activeArrow} labelColor={theme.label} strong showLabel={showLabel} />
+    </Svg>
+  );
+});
+
+interface AnimatedFootProps {
+  foot: Foot;
+  timeline: Timeline;
+  beat: SharedValue<number>;
+  bounds: Bounds;
+  geometry: { scale: number; ox: number; oy: number };
   theme: RoleTheme;
   footStyle: FootStyle;
   showLetters: boolean;
 }
 
-/** Every position + numbered arrows, like a printed step chart. */
-function Overview({ layout, theme, footStyle, showLetters }: DrawProps) {
-  return (
-    <G>
-      {layout.feet.map((p, i) => (
-        <FootShape
-          key={`f${i}`}
-          foot={p.foot}
-          pos={p.pos}
-          style={footStyle}
-          color={p.isStart ? theme.solid : theme.light}
-          outline={p.isTap}
-          showLetter={showLetters}
-        />
-      ))}
-      {layout.arrows.map((a) => (
-        <ArrowGlyph key={a.key} arrow={a} color={colors.arrow} labelColor={theme.label} />
-      ))}
-    </G>
-  );
-}
+/**
+ * One foot: an Animated.View translated/rotated on the UI thread, containing two static foot
+ * SVGs (free/light underneath, weight-bearing/solid on top) whose opacity cross-fades.
+ */
+const AnimatedFoot = memo(function AnimatedFoot({
+  foot,
+  timeline,
+  beat,
+  bounds,
+  geometry,
+  theme,
+  footStyle,
+  showLetters,
+}: AnimatedFootProps) {
+  const { scale, ox, oy } = geometry;
+  const box = FOOT_BOX * scale;
+  const minX = bounds.minX;
+  const minY = bounds.minY;
 
-/** Animated feet for the current frame, with ghost outlines of every position. */
-function Live({ layout, theme, footStyle, showLetters, frame }: DrawProps & { frame: Frame }) {
+  const moveStyle = useAnimatedStyle(() => {
+    const p = footPoseAt(timeline, foot, beat.get());
+    return {
+      transform: [
+        { translateX: ox + (p.x - minX) * scale - box / 2 },
+        { translateY: oy + (p.y - minY) * scale - box / 2 },
+        { rotate: `${p.rot}deg` },
+      ],
+    };
+  }, [timeline, foot, ox, oy, scale, box, minX, minY]);
+
+  const solidStyle = useAnimatedStyle(
+    () => ({ opacity: footPoseAt(timeline, foot, beat.get()).solid }),
+    [timeline, foot],
+  );
+
+  return (
+    <Animated.View
+      testID={`diagram-foot-${foot}`}
+      style={[{ position: 'absolute', left: 0, top: 0, width: box, height: box }, moveStyle]}
+    >
+      <FootSvg foot={foot} style={footStyle} color={theme.light} letterColor={theme.letterOnLight} showLetter={showLetters} />
+      <Animated.View style={[StyleSheet.absoluteFill, solidStyle]}>
+        <FootSvg foot={foot} style={footStyle} color={theme.solid} letterColor={theme.letterOnSolid} showLetter={showLetters} />
+      </Animated.View>
+    </Animated.View>
+  );
+});
+
+const FOOT_VIEWBOX = `${-FOOT_BOX / 2} ${-FOOT_BOX / 2} ${FOOT_BOX} ${FOOT_BOX}`;
+
+const FootSvg = memo(function FootSvg(props: {
+  foot: Foot;
+  style: FootStyle;
+  color: string;
+  letterColor: string;
+  showLetter: boolean;
+}) {
+  return (
+    <Svg width="100%" height="100%" viewBox={FOOT_VIEWBOX} style={StyleSheet.absoluteFill}>
+      <FootShape {...props} />
+    </Svg>
+  );
+});
+
+// --- live layer: fixed pose ------------------------------------------------------------------
+
+const StaticPose = memo(function StaticPose({
+  layout,
+  viewBox,
+  theme,
+  footStyle,
+  showLetters,
+  showLabel,
+  frame,
+}: {
+  layout: ChartLayout;
+  viewBox: string;
+  theme: RoleTheme;
+  footStyle: FootStyle;
+  showLetters: boolean;
+  showLabel: boolean;
+  frame: Frame;
+}) {
   const current = layout.arrows.find((a) => a.index === frame.index);
   return (
-    <G>
-      {layout.feet.map((p, i) => (
-        <FootShape key={`g${i}`} foot={p.foot} pos={p.pos} style={footStyle} color={theme.light} outline opacity={0.55} />
-      ))}
-      {current && <ArrowGlyph arrow={current} color={theme.label} labelColor={theme.label} strong />}
-      {(['L', 'R'] as Foot[]).map((f) => (
-        <FootShape
-          key={f}
-          foot={f}
-          pos={frame.feet[f]}
-          style={footStyle}
-          color={frame.weight === null || frame.weight === f ? theme.solid : theme.light}
-          showLetter={showLetters}
-        />
-      ))}
-    </G>
+    <Svg width="100%" height="100%" viewBox={viewBox} style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+      {current && (
+        <ArrowGlyph arrow={current} color={theme.activeArrow} labelColor={theme.label} strong showLabel={showLabel} />
+      )}
+      {(['L', 'R'] as Foot[]).map((f) => {
+        const solid = frame.weight === null || frame.weight === f;
+        return (
+          <FootShape
+            key={f}
+            foot={f}
+            pos={frame.feet[f]}
+            style={footStyle}
+            color={solid ? theme.solid : theme.light}
+            letterColor={solid ? theme.letterOnSolid : theme.letterOnLight}
+            showLetter={showLetters}
+          />
+        );
+      })}
+    </Svg>
   );
-}
+});
+
+// --- glyphs ----------------------------------------------------------------------------------
 
 function arrowHead(tip: Vec, dir: Vec, size = 0.32) {
   const n = { x: -dir.y, y: dir.x };
@@ -206,11 +448,13 @@ function ArrowGlyph({
   color,
   labelColor,
   strong,
+  showLabel,
 }: {
   arrow: ChartArrow;
   color: string;
   labelColor: string;
   strong?: boolean;
+  showLabel: boolean;
 }) {
   const { a, b } = arrow;
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -223,22 +467,24 @@ function ArrowGlyph({
       <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="round" />
       <Path d={arrowHead(b, u)} {...head} />
       {arrow.type === 'inPlace' && <Path d={arrowHead(a, { x: -u.x, y: -u.y })} {...head} />}
-      <SvgText
-        x={arrow.labelAt.x}
-        y={arrow.labelAt.y + LABEL_SIZE * 0.36}
-        fontSize={LABEL_SIZE}
-        fontWeight="800"
-        fontFamily={SVG_FONT}
-        fill={labelColor}
-        textAnchor="middle"
-      >
-        {arrow.label}
-      </SvgText>
+      {showLabel && (
+        <SvgText
+          x={arrow.labelAt.x}
+          y={arrow.labelAt.y + LABEL_SIZE * 0.36}
+          fontSize={LABEL_SIZE}
+          fontWeight="800"
+          fontFamily={SVG_FONT}
+          fill={labelColor}
+          textAnchor="middle"
+        >
+          {arrow.label}
+        </SvgText>
+      )}
     </G>
   );
 }
 
-function Grid({ bounds }: { bounds: Bounds }) {
+const Grid = memo(function Grid({ bounds, theme }: { bounds: Bounds; theme: RoleTheme }) {
   const lines = [];
   for (let x = Math.ceil(bounds.minX); x <= bounds.maxX; x++) {
     lines.push(
@@ -248,7 +494,7 @@ function Grid({ bounds }: { bounds: Bounds }) {
         y1={bounds.minY}
         x2={x}
         y2={bounds.maxY}
-        stroke={x === 0 ? '#D6D0C6' : '#ECE8E1'}
+        stroke={x === 0 ? theme.gridAxis : theme.grid}
         strokeWidth={x === 0 ? 0.05 : 0.03}
       />,
     );
@@ -261,10 +507,10 @@ function Grid({ bounds }: { bounds: Bounds }) {
         y1={y}
         x2={bounds.maxX}
         y2={y}
-        stroke={y === 0 ? '#D6D0C6' : '#ECE8E1'}
+        stroke={y === 0 ? theme.gridAxis : theme.grid}
         strokeWidth={y === 0 ? 0.05 : 0.03}
       />,
     );
   }
   return <G>{lines}</G>;
-}
+});

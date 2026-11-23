@@ -1,4 +1,4 @@
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, Stack, router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View, Pressable } from 'react-native';
 
@@ -23,14 +23,39 @@ function editorBounds(p: Pattern): Bounds {
   };
 }
 
-export default function Editor() {
+export default function EditorRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { get, save } = useDances();
+  const { get, ready, isBuiltIn } = useDances();
   const isNew = id === 'new';
-  const [draft, setDraft] = useState<Dance>(() => {
-    const existing = !isNew ? get(id) : undefined;
-    return existing ? JSON.parse(JSON.stringify(existing)) : newDance();
-  });
+
+  // Wait for the store: initialising the draft before it has loaded showed an empty form and
+  // "Save" then created a new dance.
+  if (!ready) return <Stack.Screen options={{ title: '' }} />;
+  // Starter dances are read-only: the player offers "Make my own version".
+  if (!isNew && isBuiltIn(id)) return <Redirect href={`/dance/${id}`} />;
+  const existing = isNew ? undefined : get(id);
+  if (!isNew && !existing) {
+    return (
+      <View style={{ padding: 24, gap: 12 }}>
+        <Stack.Screen options={{ title: 'Not found' }} />
+        <Text>This dance does not exist anymore.</Text>
+        <Button label="Go to library" onPress={() => router.replace('/')} />
+      </View>
+    );
+  }
+  // key: a different dance id gets a fresh editor state
+  return <Editor key={id} initial={existing} />;
+}
+
+const BPM_RANGE = [20, 300] as const;
+const BAR_RANGE = [1, 12] as const;
+const clampInt = (v: number, [lo, hi]: readonly [number, number], fallback: number) =>
+  Number.isFinite(v) && v > 0 ? Math.min(hi, Math.max(lo, Math.round(v))) : fallback;
+
+function Editor({ initial }: { initial?: Dance }) {
+  const { save } = useDances();
+  const isNew = !initial;
+  const [draft, setDraft] = useState<Dance>(() => (initial ? JSON.parse(JSON.stringify(initial)) : newDance()));
   const [role, setRole] = useState<Role>('leader');
   /** -1 = start position */
   const [sel, setSel] = useState(-1);
@@ -66,7 +91,12 @@ export default function Editor() {
   const onTouch = (x: number, y: number) => {
     if (!pattern) return;
     setScrollEnabled(false);
-    const pos = (old: FootPos): FootPos => ({ x: snap(x), y: snap(y), rot: old.rot });
+    const sx = snap(x);
+    const sy = snap(y);
+    const current = sel < 0 ? pattern.start[startFoot] : selected?.to;
+    // only update when the snapped position actually changes (keeps re-layouts to a minimum)
+    if (current && Math.abs(current.x - sx) < 1e-6 && Math.abs(current.y - sy) < 1e-6) return;
+    const pos = (old: FootPos): FootPos => ({ x: sx, y: sy, rot: old.rot });
     if (sel < 0) {
       setPattern((p) => ({ ...p, start: { ...p.start, [startFoot]: pos(p.start[startFoot]) } }));
     } else if (selected && selected.kind !== 'hold') {
@@ -154,9 +184,14 @@ export default function Editor() {
   };
 
   const onSave = async () => {
-    const final: Dance = { ...draft, name: draft.name.trim() || 'Untitled dance' };
-    await save(final);
-    if (isNew) router.replace(`/dance/${final.id}`);
+    const final: Dance = {
+      ...draft,
+      name: draft.name.trim() || 'Untitled dance',
+      bpm: clampInt(draft.bpm, BPM_RANGE, 120),
+      beatsPerBar: clampInt(draft.beatsPerBar, BAR_RANGE, 4),
+    };
+    const saved = await save(final);
+    if (isNew || !router.canGoBack()) router.replace(`/dance/${saved.id}`);
     else router.back();
   };
 
@@ -191,7 +226,8 @@ export default function Editor() {
                 label="BPM"
                 value={String(draft.bpm || '')}
                 keyboardType="number-pad"
-                onChange={(v) => update({ bpm: Math.max(0, Math.min(300, parseInt(v, 10) || 0)) })}
+                onChange={(v) => update({ bpm: Math.min(BPM_RANGE[1], parseInt(v, 10) || 0) })}
+                onBlur={() => update({ bpm: clampInt(draft.bpm, BPM_RANGE, 120) })}
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -199,7 +235,8 @@ export default function Editor() {
                 label="Beats/bar"
                 value={String(draft.beatsPerBar || '')}
                 keyboardType="number-pad"
-                onChange={(v) => update({ beatsPerBar: Math.max(0, Math.min(16, parseInt(v, 10) || 0)) })}
+                onChange={(v) => update({ beatsPerBar: Math.min(BAR_RANGE[1], parseInt(v, 10) || 0) })}
+                onBlur={() => update({ beatsPerBar: clampInt(draft.beatsPerBar, BAR_RANGE, 4) })}
               />
             </View>
           </View>
@@ -420,6 +457,7 @@ function Field({
   placeholder,
   multiline,
   keyboardType,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -427,6 +465,7 @@ function Field({
   placeholder?: string;
   multiline?: boolean;
   keyboardType?: 'default' | 'number-pad' | 'url';
+  onBlur?: () => void;
 }) {
   return (
     <View style={{ marginBottom: 8 }}>
@@ -434,6 +473,7 @@ function Field({
       <TextInput
         value={value}
         onChangeText={onChange}
+        onBlur={onBlur}
         placeholder={placeholder}
         placeholderTextColor="#A8A29E"
         multiline={multiline}

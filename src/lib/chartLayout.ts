@@ -101,7 +101,16 @@ function collectFeet(pattern: Pattern, states: FeetState[]): ChartFoot[] {
   return out;
 }
 
-export function layoutChart(pattern: Pattern, states: FeetState[]): ChartLayout {
+export interface LayoutOptions {
+  /** Place step-number labels (default true). The animated view does not need them. */
+  labels?: boolean;
+}
+
+/** A label must be this much closer (in units) to its own arrow than to any other arrow. */
+const AMBIGUITY_MARGIN = 0.5;
+
+export function layoutChart(pattern: Pattern, states: FeetState[], options: LayoutOptions = {}): ChartLayout {
+  const withLabels = options.labels ?? true;
   const feet = collectFeet(pattern, states);
   const capsules = feet.map((f) => footCapsule(f.pos));
   const placed: [Vec, Vec][] = [];
@@ -142,9 +151,11 @@ export function layoutChart(pattern: Pattern, states: FeetState[]): ChartLayout 
       const [a, b] = chosen.s;
       const sd = chosen.side;
       const labelCandidates: Vec[] = [];
-      for (const d of [0.6, 1.0])
-        for (const y of [0, -0.6, 0.6, -1.2, 1.2]) labelCandidates.push({ x: a.x + sd * d, y: to.y + y });
-      for (const y of [-1.3, 1.3]) labelCandidates.push({ x: a.x, y: to.y + y });
+      // beside the arrow on the side away from the foot, then beyond either end, then the foot side
+      for (const d of [0.6, 0.85, 1.15])
+        for (const y of [0, -0.35, 0.35, -0.7, 0.7]) labelCandidates.push({ x: a.x + sd * d, y: to.y + y });
+      for (const e of [0.55, 0.85]) labelCandidates.push({ x: a.x, y: a.y - e }, { x: a.x, y: b.y + e });
+      for (const y of [0, -0.4, 0.4]) labelCandidates.push({ x: a.x - sd * 0.6, y: to.y + y });
       pending.push({ key: `a${i}`, index: i, label: step.count, dashed, type: 'inPlace', a, b, labelCandidates });
       return;
     }
@@ -178,36 +189,44 @@ export function layoutChart(pattern: Pattern, states: FeetState[]): ChartLayout 
     placed.push(chosen.s);
 
     const [a, b] = chosen.s;
+    // "outer" side = the side the arrow was pushed to (away from the feet it avoids)
     const sgn = chosen.off === 0 ? 1 : Math.sign(chosen.off);
+    const at = (t: number, side: number, d: number): Vec => ({
+      x: a.x + (b.x - a.x) * t + n.x * side * d,
+      y: a.y + (b.y - a.y) * t + n.y * side * d,
+    });
     const labelCandidates: Vec[] = [];
-    for (const d of [0.6, 1.0, 1.5]) {
-      for (const t of [0.5, 0.35, 0.65, 0.2, 0.8]) {
-        labelCandidates.push({
-          x: a.x + (b.x - a.x) * t + n.x * sgn * d,
-          y: a.y + (b.y - a.y) * t + n.y * sgn * d,
-        });
-      }
-    }
-    for (const t of [0.5, 0.3, 0.7]) {
-      labelCandidates.push({ x: a.x + (b.x - a.x) * t - n.x * sgn * 0.6, y: a.y + (b.y - a.y) * t - n.y * sgn * 0.6 });
-    }
+    // 1. midpoint on the outer side, sliding along the arrow to resolve collisions
+    for (const d of [0.6, 0.85, 1.15]) for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) labelCandidates.push(at(t, sgn, d));
+    // 2. on the arrow's own axis, just beyond its tail or its head (unambiguous for parallel arrows)
+    for (const e of [0.55, 0.85]) labelCandidates.push({ x: a.x - u.x * e, y: a.y - u.y * e }, { x: b.x + u.x * e, y: b.y + u.y * e });
+    // 3. inner side
+    for (const d of [0.6, 0.85]) for (const t of [0.5, 0.35, 0.65]) labelCandidates.push(at(t, -sgn, d));
     pending.push({ key: `a${i}`, index: i, label: step.count, dashed, type: 'move', a, b, labelCandidates });
   });
 
   // Labels after all arrows, so they can avoid every arrow.
   const labels: Vec[] = [];
   const labelR = LABEL_SIZE * 0.5;
-  const labelScore = (c: Vec) => {
+  /**
+   * > 0 when the label is clear of feet, arrows and other labels AND unambiguous: clearly closer
+   * to its own arrow than to any other one (so "3" and "1" next to two parallel arrows can
+   * always be told apart).
+   */
+  const labelScore = (c: Vec, own: number) => {
     const lf = Math.min(Infinity, ...capsules.map(([p, q]) => distPointSeg(c, p, q) - FOOT_RADIUS - labelR));
-    const la = Math.min(Infinity, ...placed.map(([p, q]) => distPointSeg(c, p, q) - labelR));
+    const dOwn = distPointSeg(c, placed[own][0], placed[own][1]);
+    const dOther = Math.min(Infinity, ...placed.filter((_, k) => k !== own).map(([p, q]) => distPointSeg(c, p, q)));
     const ll = Math.min(Infinity, ...labels.map((l) => Math.hypot(l.x - c.x, l.y - c.y) - LABEL_SIZE));
-    return Math.min(lf, la + 0.05, ll);
+    const ambiguity = dOther - dOwn - AMBIGUITY_MARGIN;
+    return Math.min(lf, dOwn - labelR + 0.1, dOther - labelR + 0.05, ll, ambiguity);
   };
-  const arrows: ChartArrow[] = pending.map(({ labelCandidates, ...rest }) => {
+  const arrows: ChartArrow[] = pending.map(({ labelCandidates, ...rest }, k) => {
+    if (!withLabels) return { ...rest, labelAt: rest.b };
     let best = labelCandidates[0];
     let bestScore = -Infinity;
     for (const c of labelCandidates) {
-      const sc = labelScore(c);
+      const sc = labelScore(c, k);
       if (sc > 0.05) {
         best = c;
         break;
@@ -229,8 +248,12 @@ export function layoutChart(pattern: Pattern, states: FeetState[]): ChartLayout 
     ys.push(p.y - 0.55, p.y + 0.55, q.y - 0.55, q.y + 0.55);
   });
   arrows.forEach((ar) => {
-    xs.push(ar.a.x, ar.b.x, ar.labelAt.x - labelR, ar.labelAt.x + labelR);
-    ys.push(ar.a.y, ar.b.y, ar.labelAt.y - labelR, ar.labelAt.y + labelR);
+    xs.push(ar.a.x, ar.b.x);
+    ys.push(ar.a.y, ar.b.y);
+    if (withLabels) {
+      xs.push(ar.labelAt.x - labelR, ar.labelAt.x + labelR);
+      ys.push(ar.labelAt.y - labelR, ar.labelAt.y + labelR);
+    }
   });
   const m = 0.5;
   const bounds = growTo(

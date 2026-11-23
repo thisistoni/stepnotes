@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { Button } from '@/components/ui';
 import { useDances } from '@/lib/store';
 import { colors } from '@/lib/theme';
+import { DanceValidationError } from '@/lib/validate';
 
 export default function ImportScreen() {
   const { importJson } = useDances();
@@ -16,7 +17,8 @@ export default function ImportScreen() {
       const d = await importJson(text);
       router.replace(`/dance/${d.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not read this dance.');
+      // validation errors are written for people; anything else (e.g. storage) gets a generic message
+      setError(e instanceof DanceValidationError ? e.message : 'Could not save this dance. Please try again.');
     }
   };
 

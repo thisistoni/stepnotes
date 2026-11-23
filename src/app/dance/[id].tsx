@@ -1,37 +1,57 @@
 import * as Haptics from 'expo-haptics';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import * as Speech from 'expo-speech';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import type { SharedValue } from 'react-native-reanimated';
 
 import { StepDiagram } from '@/components/StepDiagram';
 import { Button, Card, Segmented, SectionTitle, Toggle } from '@/components/ui';
-import { beatForStep, computeStates, describeStep, frameAt, mirrorPattern, totalBeats } from '@/lib/pattern';
+import { computeStates, describeStep, mirrorPattern, stepStartBeats, totalBeats } from '@/lib/pattern';
+import { usePrefs } from '@/lib/prefs';
 import { exportJson, useDances } from '@/lib/store';
 import { DEFAULT_FOOT_STYLE, ROLE_THEME, colors } from '@/lib/theme';
-import { ROLE_LABEL, type Pattern, type Role } from '@/lib/types';
+import { ROLE_LABEL, type Dance, type Pattern, type Role } from '@/lib/types';
 import { usePlayback } from '@/lib/usePlayback';
 
 type RoleView = Role | 'both';
 const SPEEDS = ['0.5', '0.75', '1', '1.25'] as const;
 
-export default function DancePlayer() {
+export default function DancePlayerRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { get, duplicate, remove } = useDances();
+  const { get, ready } = useDances();
+  const prefsReady = usePrefs().ready;
   const dance = get(id);
 
-  const [roleView, setRoleView] = useState<RoleView>('leader');
+  if (!ready || !prefsReady) {
+    return <Stack.Screen options={{ title: '' }} />;
+  }
+  if (!dance) {
+    return (
+      <View style={{ padding: 24, gap: 12 }}>
+        <Stack.Screen options={{ title: 'Not found' }} />
+        <Text>This dance does not exist anymore.</Text>
+        <Button label="Go to library" onPress={() => router.replace('/')} />
+      </View>
+    );
+  }
+  return <DancePlayer dance={dance} />;
+}
+
+function DancePlayer({ dance }: { dance: Dance }) {
+  const { duplicate, remove } = useDances();
+  const { prefs, set } = usePrefs();
+
+  const [roleView, setRoleView] = useState<RoleView>(() =>
+    prefs.preferredRole === 'follower' && dance.roles.follower ? 'follower' : 'leader',
+  );
   const [mode, setMode] = useState<'live' | 'overview'>('live');
-  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>('0.75');
   const [mirror, setMirror] = useState(false);
-  const [speak, setSpeak] = useState(false);
-  const [vibrate, setVibrate] = useState(true);
-  const [letters, setLetters] = useState(true);
+  const speed = prefs.speed;
 
   const roles: Role[] = roleView === 'both' ? ['leader', 'follower'] : [roleView];
   const patterns = useMemo(() => {
     const out: Partial<Record<Role, Pattern>> = {};
-    if (!dance) return out;
     (['leader', 'follower'] as Role[]).forEach((r) => {
       const p = dance.roles[r];
       if (p) out[r] = mirror ? mirrorPattern(p) : p;
@@ -40,53 +60,37 @@ export default function DancePlayer() {
   }, [dance, mirror]);
 
   const primaryRole: Role = roleView === 'follower' ? 'follower' : 'leader';
-  const primary = patterns[primaryRole];
+  const primary = patterns[primaryRole] ?? dance.roles.leader;
   const total = useMemo(
     () => Math.max(...roles.map((r) => (patterns[r] ? totalBeats(patterns[r]!) : 0)), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [patterns, roleView],
   );
-  const bpm = (dance?.bpm ?? 120) * Number(speed);
-  const playback = usePlayback(total, bpm);
-
-  const primaryStates = useMemo(() => (primary ? computeStates(primary) : []), [primary]);
-  const frame = primary ? frameAt(primary, primaryStates, playback.beat) : null;
-  const index = frame?.index ?? -1;
+  const starts = useMemo(() => stepStartBeats(primary), [primary]);
+  const bpm = dance.bpm * speed;
+  const primaryStates = useMemo(() => computeStates(primary), [primary]);
 
   // say the count / vibrate on every new step while playing
-  const lastIndex = useRef(-2);
-  useEffect(() => {
-    if (!playback.playing || !primary || index === lastIndex.current) {
-      lastIndex.current = index;
-      return;
-    }
-    lastIndex.current = index;
-    if (index < 0) return;
-    const step = primary.steps[index];
-    if (vibrate && step.kind !== 'hold' && Platform.OS !== 'web') {
+  const onStep = (i: number) => {
+    const step = primary.steps[i];
+    if (!step) return;
+    if (prefs.haptics && step.kind !== 'hold' && Platform.OS !== 'web') {
       Haptics.impactAsync(step.kind === 'tap' ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
     }
-    if (speak) {
+    if (prefs.speakCounts) {
       Speech.stop();
       Speech.speak(step.count === '&' ? 'and' : step.count, { rate: Math.min(2, 0.9 + bpm / 200) });
     }
-  }, [index, playback.playing, primary, speak, vibrate, bpm]);
+  };
+  const playback = usePlayback({ totalBeats: total, bpm, stepStartBeats: starts, loop: prefs.loop, onStep });
+  const index = playback.index;
 
   useEffect(() => () => void Speech.stop(), []);
-
-  if (!dance || !primary) {
-    return (
-      <View style={{ padding: 24 }}>
-        <Stack.Screen options={{ title: 'Not found' }} />
-        <Text>This dance does not exist anymore.</Text>
-      </View>
-    );
-  }
 
   const step = index >= 0 ? primary.steps[index] : null;
   const theme = ROLE_THEME[primaryRole];
 
-  const goTo = (i: number) => playback.seek(beatForStep(primary, i));
+  const goTo = playback.seekToStep;
   const prev = () => goTo(Math.max(-1, index - 1));
   const next = () => goTo(index + 1 >= primary.steps.length ? -1 : index + 1);
 
@@ -98,7 +102,9 @@ export default function DancePlayer() {
   const onDelete = () => {
     const doIt = async () => {
       await remove(dance.id);
-      router.back();
+      // deep link / web reload: there may be no screen to go back to
+      if (router.canGoBack()) router.back();
+      else router.replace('/');
     };
     if (Platform.OS === 'web') {
       if (confirm(`Delete “${dance.name}”?`)) doIt();
@@ -155,7 +161,7 @@ export default function DancePlayer() {
                   footStyle={dance.footStyle?.[r] ?? DEFAULT_FOOT_STYLE[r]}
                   mode={mode}
                   beat={playback.beat}
-                  letters={letters}
+                  letters={prefs.showLetters}
                   maxHeight={roles.length > 1 ? 260 : 400}
                 />
               </View>
@@ -167,7 +173,7 @@ export default function DancePlayer() {
         {mode === 'live' && (
           <>
             <View style={s.countRow}>
-              <Text style={[s.count, { color: theme.label }]}>{step ? step.count : '–'}</Text>
+              <Text testID="current-count" style={[s.count, { color: theme.label }]}>{step ? step.count : '–'}</Text>
               <Text style={s.countDesc}>
                 {step ? describeStep(step, primaryStates[index]) : 'Start position. Press play or step through.'}
               </Text>
@@ -187,19 +193,23 @@ export default function DancePlayer() {
             <SectionTitle>Tempo · {Math.round(bpm)} bpm</SectionTitle>
             <Segmented
               options={SPEEDS.map((v) => ({ value: v, label: `${Math.round(Number(v) * 100)}%` }))}
-              value={speed}
-              onChange={setSpeed}
+              value={String(speed) as (typeof SPEEDS)[number]}
+              onChange={(v) => set({ speed: Number(v) })}
               color={colors.text}
             />
           </>
         )}
 
         <View style={s.toggles}>
-          {mode === 'live' && <Toggle label="Loop" value={playback.loop} onChange={playback.setLoop} />}
-          {mode === 'live' && <Toggle label="Say counts" value={speak} onChange={setSpeak} />}
-          {mode === 'live' && Platform.OS !== 'web' && <Toggle label="Vibrate" value={vibrate} onChange={setVibrate} />}
+          {mode === 'live' && <Toggle label="Loop" value={prefs.loop} onChange={(loop) => set({ loop })} />}
+          {mode === 'live' && (
+            <Toggle label="Say counts" value={prefs.speakCounts} onChange={(speakCounts) => set({ speakCounts })} />
+          )}
+          {mode === 'live' && Platform.OS !== 'web' && (
+            <Toggle label="Vibrate" value={prefs.haptics} onChange={(haptics) => set({ haptics })} />
+          )}
           <Toggle label="Mirror" value={mirror} onChange={setMirror} />
-          <Toggle label="L / R" value={letters} onChange={setLetters} />
+          <Toggle label="L / R" value={prefs.showLetters} onChange={(showLetters) => set({ showLetters })} />
         </View>
 
         <SectionTitle>Steps · {ROLE_LABEL[primaryRole]}</SectionTitle>
@@ -269,19 +279,17 @@ function RoleDiagram({
   role: Role;
   footStyle: 'shoe' | 'heel';
   mode: 'live' | 'overview';
-  beat: number;
+  beat: SharedValue<number>;
   letters: boolean;
   maxHeight: number;
 }) {
-  const states = useMemo(() => computeStates(pattern), [pattern]);
-  const frame = frameAt(pattern, states, beat);
   return (
     <StepDiagram
       pattern={pattern}
       theme={ROLE_THEME[role]}
       footStyle={footStyle}
       mode={mode}
-      frame={frame}
+      beat={beat}
       showLetters={letters}
       maxHeight={maxHeight}
     />
