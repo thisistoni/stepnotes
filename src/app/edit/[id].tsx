@@ -1,519 +1,343 @@
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View, Pressable } from 'react-native';
+/**
+ * Editor. Routes:
+ *   /edit/new              blank dance
+ *   /edit/new?from=<id>    unsaved copy of any dance ("Make my own version"), stored only on Save
+ *   /edit/<id>             an own dance (built-in ids redirect to the player)
+ */
+import { Redirect, router, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { patternBounds, StepDiagram, type Bounds } from '@/components/StepDiagram';
-import { Button, Card, Segmented, SectionTitle } from '@/components/legacyUi';
-import { Header, Screen } from '@/components/ui';
-import { computeStates, describeStep, nextCount, otherFoot, toPartner, uid } from '@/lib/pattern';
+import { CoachHint, coachHint } from '@/components/editor/CoachHint';
+import { DetailsCard } from '@/components/editor/DetailsCard';
+import { EditorCanvas, RotateTray } from '@/components/editor/EditorCanvas';
+import { EditorTopBar } from '@/components/editor/EditorTopBar';
+import { FollowerSetupCard, FollowerToolsCard } from '@/components/editor/FollowerCards';
+import { Inspector } from '@/components/editor/Inspector';
+import { RevealProvider, useRevealScroll } from '@/components/editor/reveal';
+import { StepStrip } from '@/components/editor/StepStrip';
+import { EmptyState, Entrance, FootSticker, goBackOrHome, hapticNotify, Screen, Segmented, Skeleton, useConfirm, useToast } from '@/components/ui';
+import { computeStates, nextCount } from '@/lib/pattern';
 import { newDance, useDances } from '@/lib/store';
-import { DEFAULT_FOOT_STYLE, ROLE_THEME, colors } from '@/lib/theme';
-import { ROLE_LABEL, type Dance, type Foot, type FootPos, type FootStyle, type Pattern, type Role, type Step, type StepKind } from '@/lib/types';
-
-const SNAP = 0.2;
-const snap = (v: number) => Math.round(v / SNAP) * SNAP;
-const MIN_BOUNDS: Bounds = { minX: -5, minY: -5, maxX: 5, maxY: 5 };
-
-function editorBounds(p: Pattern): Bounds {
-  const b = patternBounds(p, 3.5, 10);
-  return {
-    minX: Math.min(b.minX, MIN_BOUNDS.minX),
-    minY: Math.min(b.minY, MIN_BOUNDS.minY),
-    maxX: Math.max(b.maxX, MIN_BOUNDS.maxX),
-    maxY: Math.max(b.maxY, MIN_BOUNDS.maxY),
-  };
-}
+import { DEFAULT_FOOT_STYLE, ROLE_COLOR, space, styleColor } from '@/lib/theme';
+import type { Dance, Role } from '@/lib/types';
+import { copyForEditing, useDanceDraft } from '@/lib/useDanceDraft';
+import { DanceValidationError } from '@/lib/validate';
 
 export default function EditorRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const { get, ready, isBuiltIn } = useDances();
   const isNew = id === 'new';
 
-  // Wait for the store: initialising the draft before it has loaded showed an empty form and
-  // "Save" then created a new dance.
-  if (!ready) return <Screen header={<Header />} />;
+  // Wait for the store, or "Save" on a not-yet-loaded dance would create a new one.
+  if (!ready) {
+    return (
+      <Screen header={<EditorTopBar title={isNew ? 'New dance' : 'Edit dance'} onClose={goBackOrHome} />}>
+        <Skeleton height={68} radius={24} />
+        <Skeleton height={320} radius={28} style={s.loadingStage} />
+      </Screen>
+    );
+  }
   // Starter dances are read-only: the player offers "Make my own version".
   if (!isNew && isBuiltIn(id)) return <Redirect href={`/dance/${id}`} />;
   const existing = isNew ? undefined : get(id);
   if (!isNew && !existing) {
     return (
-      <Screen header={<Header title="Not found" />} contentStyle={{ gap: 12 }}>
-        <Text>This dance does not exist anymore.</Text>
-        <Button label="Go to library" onPress={() => router.replace('/')} />
+      <Screen header={<EditorTopBar title="Not found" onClose={goBackOrHome} />}>
+        <EmptyState
+          art={<FootSticker tone={ROLE_COLOR.leader} size={44} rotate={-10} />}
+          title="This dance is gone"
+          body="It may have been deleted."
+          action={{ label: 'Back to library', onPress: () => router.replace('/') }}
+          style={s.notFound}
+        />
       </Screen>
     );
   }
-  // key: a different dance id gets a fresh editor state
-  return <Editor key={id} initial={existing} />;
+  const source = isNew && from ? get(from) : undefined;
+  // key: another dance (or another source) gets a fresh editor
+  return <Editor key={`${id}:${source?.id ?? ''}`} existing={existing} source={source} />;
 }
 
-const BPM_RANGE = [20, 300] as const;
-const BAR_RANGE = [1, 12] as const;
-const clampInt = (v: number, [lo, hi]: readonly [number, number], fallback: number) =>
-  Number.isFinite(v) && v > 0 ? Math.min(hi, Math.max(lo, Math.round(v))) : fallback;
+/** Normalise what the user typed before storing. */
+function finalize(d: Dance): Dance {
+  const fixCounts = (p: Dance['roles']['leader']) => ({
+    ...p,
+    steps: p.steps.map((st, i) => (st.count.trim() ? st : { ...st, count: nextCount(p.steps.slice(0, i), d.beatsPerBar) })),
+  });
+  return {
+    ...d,
+    name: d.name.trim() || 'Untitled dance',
+    style: d.style.trim(),
+    description: d.description.trim(),
+    videoUrl: d.videoUrl?.trim() || undefined,
+    roles: {
+      leader: fixCounts(d.roles.leader),
+      ...(d.roles.follower ? { follower: fixCounts(d.roles.follower) } : {}),
+    },
+  };
+}
 
-function Editor({ initial }: { initial?: Dance }) {
+const URL_RE = /^https?:\/\/\S+\.\S+$/i;
+function videoProblem(url: string | undefined): string | null {
+  const v = url?.trim();
+  if (!v || URL_RE.test(v)) return null;
+  return 'This doesn’t look like a web link. Paste the full address, starting with https://';
+}
+
+function Editor({ existing, source }: { existing?: Dance; source?: Dance }) {
+  const isNew = !existing;
   const { save } = useDances();
-  const isNew = !initial;
-  const [draft, setDraft] = useState<Dance>(() => (initial ? JSON.parse(JSON.stringify(initial)) : newDance()));
-  const [role, setRole] = useState<Role>('leader');
-  /** -1 = start position */
-  const [sel, setSel] = useState(-1);
-  const [startFoot, setStartFoot] = useState<Foot>('L');
-  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { height: winH } = useWindowDimensions();
+  const [initial] = useState<Dance>(() => (existing ? existing : source ? copyForEditing(source) : newDance()));
+  const d = useDanceDraft(initial);
+  const { draft, role, pattern, sel, startFoot } = d;
 
-  const pattern = draft.roles[role];
-  const [bounds, setBounds] = useState<Bounds>(() => editorBounds(draft.roles.leader));
-  const changeRole = (r: Role) => {
-    setRole(r);
-    const p = draft.roles[r];
-    if (p) setBounds(editorBounds(p));
-    setSel(-1);
-  };
+  const [detailsOpen, setDetailsOpen] = useState(isNew && !source);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [pressing, setPressing] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const { scrollRef, contentRef, onScroll, onLayout, reveal: revealField } = useRevealScroll();
 
-  const states = useMemo(() => (pattern ? computeStates(pattern) : []), [pattern]);
-
-  const update = (patch: Partial<Dance>) => setDraft((d) => ({ ...d, ...patch }));
-  const setPattern = (fn: (p: Pattern) => Pattern) =>
-    setDraft((d) => {
-      const p = d.roles[role];
-      if (!p) return d;
-      return { ...d, roles: { ...d.roles, [role]: fn(p) } };
+  // --- leaving -------------------------------------------------------------------------------
+  const askDiscard = useCallback(
+    () =>
+      confirm({
+        title: 'Discard your changes?',
+        message: isNew ? 'This dance has not been saved yet.' : 'Your edits since the last save will be lost.',
+        confirmLabel: 'Discard',
+        cancelLabel: 'Keep editing',
+        destructive: true,
+        icon: 'trash',
+      }),
+    [confirm, isNew],
+  );
+  // hardware back, swipe-back and browser back/reload
+  const allowLeave = usePreventRemove(d.dirty && !leaving, ({ repeat }) => {
+    askDiscard().then((ok) => {
+      if (!ok) return;
+      setLeaving(true);
+      repeat();
     });
-  const updateStep = (i: number, patch: Partial<Step>) =>
-    setPattern((p) => ({ ...p, steps: p.steps.map((s, k) => (k === i ? { ...s, ...patch } : s)) }));
-
-  const selected = pattern && sel >= 0 ? pattern.steps[sel] : null;
-  const theme = ROLE_THEME[role];
-  const footStyle: FootStyle = draft.footStyle?.[role] ?? DEFAULT_FOOT_STYLE[role];
-
-  // --- canvas interaction ---------------------------------------------------------------
-  const onTouch = (x: number, y: number) => {
-    if (!pattern) return;
-    setScrollEnabled(false);
-    const sx = snap(x);
-    const sy = snap(y);
-    const current = sel < 0 ? pattern.start[startFoot] : selected?.to;
-    // only update when the snapped position actually changes (keeps re-layouts to a minimum)
-    if (current && Math.abs(current.x - sx) < 1e-6 && Math.abs(current.y - sy) < 1e-6) return;
-    const pos = (old: FootPos): FootPos => ({ x: sx, y: sy, rot: old.rot });
-    if (sel < 0) {
-      setPattern((p) => ({ ...p, start: { ...p.start, [startFoot]: pos(p.start[startFoot]) } }));
-    } else if (selected && selected.kind !== 'hold') {
-      updateStep(sel, { to: pos(selected.to) });
-    }
-  };
-
-  const rotate = (delta: number) => {
-    if (!pattern) return;
-    if (sel < 0) {
-      setPattern((p) => ({
-        ...p,
-        start: { ...p.start, [startFoot]: { ...p.start[startFoot], rot: p.start[startFoot].rot + delta } },
-      }));
-    } else if (selected) {
-      updateStep(sel, { to: { ...selected.to, rot: selected.to.rot + delta } });
-    }
-  };
-
-  const addStep = () => {
-    if (!pattern) return;
-    const insertAt = sel + 1;
-    const prevStep = sel >= 0 ? pattern.steps[sel] : null;
-    const foot: Foot = prevStep && prevStep.kind !== 'hold' ? otherFoot(prevStep.foot) : prevStep ? prevStep.foot : 'L';
-    const before = states[insertAt];
-    const step: Step = {
-      id: uid('step'),
-      count: nextCount(pattern.steps.slice(0, insertAt), draft.beatsPerBar),
-      beats: 1,
-      foot,
-      kind: 'step',
-      to: { ...before.pos[foot] },
-    };
-    setPattern((p) => {
-      const steps = [...p.steps];
-      steps.splice(insertAt, 0, step);
-      return { ...p, steps };
-    });
-    setSel(insertAt);
-  };
-
-  const deleteStep = () => {
-    if (sel < 0) return;
-    setPattern((p) => ({ ...p, steps: p.steps.filter((_, k) => k !== sel) }));
-    setSel((i) => i - 1);
-  };
-
-  const moveStep = (dir: -1 | 1) => {
-    const j = sel + dir;
-    if (!pattern || sel < 0 || j < 0 || j >= pattern.steps.length) return;
-    setPattern((p) => {
-      const steps = [...p.steps];
-      [steps[sel], steps[j]] = [steps[j], steps[sel]];
-      return { ...p, steps };
-    });
-    setSel(j);
-  };
-
-  const changeFoot = (foot: Foot) => {
-    if (!selected || foot === selected.foot) return;
-    // move the other foot instead – start from where that foot currently is
-    updateStep(sel, { foot, to: { ...states[sel].pos[foot] } });
-  };
-
-  const changeKind = (kind: StepKind) => {
-    if (!selected) return;
-    updateStep(sel, kind === 'hold' ? { kind, to: { ...states[sel].pos[selected.foot] } } : { kind });
-  };
-
-  const createFollower = (mode: 'mirror' | 'empty') => {
-    setDraft((d) => ({
-      ...d,
-      roles: {
-        ...d.roles,
-        follower: mode === 'mirror' ? toPartner(d.roles.leader) : { start: { ...d.roles.leader.start }, steps: [] },
-      },
-    }));
-    setBounds(editorBounds(mode === 'mirror' ? toPartner(draft.roles.leader) : draft.roles.leader));
-    setSel(-1);
-  };
-
-  const removeFollower = () => {
-    setDraft((d) => ({ ...d, roles: { leader: d.roles.leader } }));
-    changeRole('leader');
+  });
+  const close = async () => {
+    if (d.dirty && !(await askDiscard())) return;
+    setLeaving(true);
+    allowLeave();
+    goBackOrHome();
   };
 
   const onSave = async () => {
-    const final: Dance = {
-      ...draft,
-      name: draft.name.trim() || 'Untitled dance',
-      bpm: clampInt(draft.bpm, BPM_RANGE, 120),
-      beatsPerBar: clampInt(draft.beatsPerBar, BAR_RANGE, 4),
-    };
-    const saved = await save(final);
-    if (isNew || !router.canGoBack()) router.replace(`/dance/${saved.id}`);
-    else router.back();
+    const problem = videoProblem(draft.videoUrl);
+    if (problem) {
+      setVideoError(problem);
+      setDetailsOpen(true);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      toast.show({ message: 'Check the video link first', icon: 'alert' });
+      hapticNotify('error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await save(finalize(draft));
+      hapticNotify('success');
+      toast.show({ message: isNew ? 'Dance saved' : 'Changes saved', icon: 'check' });
+      setLeaving(true);
+      allowLeave();
+      if (isNew) router.replace(`/dance/${saved.id}`);
+      else if (router.canGoBack()) router.back();
+      else router.replace(`/dance/${saved.id}`);
+    } catch (e) {
+      setSaving(false);
+      toast.show({
+        message: e instanceof DanceValidationError ? e.message : 'Could not save. Please try again.',
+        icon: 'alert',
+      });
+    }
   };
 
-  const frame = pattern
-    ? { index: sel, feet: states[sel + 1]?.pos ?? pattern.start, weight: states[sel + 1]?.weight ?? null, progress: 1 }
-    : undefined;
+  // --- steps -------------------------------------------------------------------------------
+  const states = useMemo(() => (pattern ? computeStates(pattern) : []), [pattern]);
+  const step = pattern && sel >= 0 ? pattern.steps[sel] : null;
 
-  const hint =
-    sel < 0
-      ? `Start position – tap or drag on the grid to place the ${startFoot === 'L' ? 'left' : 'right'} foot.`
-      : selected?.kind === 'hold'
-        ? 'Hold – nobody moves on this count.'
-        : `Tap or drag on the grid to place the ${selected?.foot === 'L' ? 'left' : 'right'} foot for count “${selected?.count}”.`;
+  // The toast's Undo only applies while the delete is still the latest change.
+  const depth = useRef(d.undoDepth);
+  useEffect(() => {
+    depth.current = d.undoDepth;
+  }, [d.undoDepth]);
+  const { deleteStep: removeStep, undo } = d;
+  const deleteStep = useCallback(
+    (i: number) => {
+      const expected = depth.current + 1;
+      removeStep(i);
+      toast.show({
+        message: `Step ${i + 1} deleted`,
+        icon: 'trash',
+        action: { label: 'Undo', onPress: () => depth.current === expected && undo() },
+      });
+    },
+    [removeStep, undo, toast],
+  );
+  const { updateStep, select: selectStep } = d;
+  const onCountBlur = useCallback(
+    (i: number) => {
+      const st = pattern?.steps[i];
+      if (pattern && st && !st.count.trim()) updateStep(i, { count: nextCount(pattern.steps.slice(0, i), draft.beatsPerBar) });
+    },
+    [updateStep, pattern, draft.beatsPerBar],
+  );
+  const select = useCallback(
+    (i: number) => {
+      setBlocked(false);
+      selectStep(i);
+    },
+    [selectStep],
+  );
+
+  const regenerate = async () => {
+    const ok = await confirm({
+      title: 'Mirror the leader again?',
+      message: 'The follower’s steps are replaced by a mirror of the leader’s. You can undo this.',
+      confirmLabel: 'Mirror again',
+      icon: 'mirror',
+    });
+    if (ok) d.createFollower('mirror');
+  };
+  const removeFollower = async () => {
+    const ok = await confirm({
+      title: 'Remove the follower part?',
+      message: 'All follower steps are removed from this dance. You can undo this.',
+      confirmLabel: 'Remove',
+      destructive: true,
+      icon: 'trash',
+    });
+    if (ok) d.removeFollower();
+  };
+
+  // --- layout ------------------------------------------------------------------------------
+  // Canvas + step strip fit on one phone screen together (with the details collapsed).
+  const canvasH = Math.round(Math.min(380, Math.max(200, winH - 470)));
+  const tone = styleColor(draft.style);
+  const hint = coachHint({ sel, step, stepCount: pattern?.steps.length ?? 0, startFoot, dragging: d.dragging, blocked });
+  const roleOptions = (['leader', 'follower'] as Role[]).map((r) => ({
+    value: r,
+    label: r === 'leader' ? 'Leader' : 'Follower',
+    icon: r === 'leader' ? ('flat-shoe' as const) : ('heel' as const),
+    tone: ROLE_COLOR[r],
+  }));
 
   return (
     <Screen
       scroll={false}
       padded={false}
+      testID="editor"
       header={
-        <Header
+        <EditorTopBar
           title={isNew ? 'New dance' : 'Edit dance'}
-          leading="close"
-          sideWidth={72}
-          right={<Button small variant="primary" label="Save" onPress={onSave} />}
+          onClose={close}
+          onUndo={d.undo}
+          canUndo={d.canUndo}
+          onSave={onSave}
+          saving={saving}
         />
       }
     >
-      <ScrollView contentContainerStyle={s.content} scrollEnabled={scrollEnabled} keyboardShouldPersistTaps="handled">
-        <Card>
-          <Field label="Name" value={draft.name} onChange={(name) => update({ name })} placeholder="e.g. Salsa Cross Body Lead" />
-          <View style={s.fieldRow}>
-            <View style={{ flex: 2 }}>
-              <Field label="Style" value={draft.style} onChange={(style) => update({ style })} placeholder="Salsa, Tango…" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Field
-                label="BPM"
-                value={String(draft.bpm || '')}
-                keyboardType="number-pad"
-                onChange={(v) => update({ bpm: Math.min(BPM_RANGE[1], parseInt(v, 10) || 0) })}
-                onBlur={() => update({ bpm: clampInt(draft.bpm, BPM_RANGE, 120) })}
+      <ScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        onLayout={onLayout}
+        scrollEventThrottle={32}
+        scrollEnabled={!pressing}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.content}
+      >
+        <View ref={contentRef} style={s.stack}>
+          <RevealProvider value={revealField}>
+            <Entrance index={0}>
+              <DetailsCard
+                draft={draft}
+                expanded={detailsOpen}
+                onToggle={() => setDetailsOpen((o) => !o)}
+                onChange={d.setDetails}
+                onSeal={d.seal}
+                videoError={videoError}
+                onVideoBlur={() => setVideoError(videoProblem(draft.videoUrl))}
               />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Field
-                label="Beats/bar"
-                value={String(draft.beatsPerBar || '')}
-                keyboardType="number-pad"
-                onChange={(v) => update({ beatsPerBar: Math.min(BAR_RANGE[1], parseInt(v, 10) || 0) })}
-                onBlur={() => update({ beatsPerBar: clampInt(draft.beatsPerBar, BAR_RANGE, 4) })}
-              />
-            </View>
-          </View>
-          <Field
-            label="Description / teaching notes"
-            value={draft.description}
-            onChange={(description) => update({ description })}
-            multiline
-            placeholder="Technique tips, styling, what the lead should feel…"
-          />
-          <Field
-            label="Reference video link (optional)"
-            value={draft.videoUrl ?? ''}
-            onChange={(videoUrl) => update({ videoUrl: videoUrl || undefined })}
-            placeholder="https://…"
-            keyboardType="url"
-          />
-        </Card>
+            </Entrance>
 
-        <SectionTitle>Steps</SectionTitle>
-        <Segmented
-          options={[
-            { value: 'leader', label: 'Leader' },
-            { value: 'follower', label: draft.roles.follower ? 'Follower' : 'Follower +' },
-          ]}
-          value={role}
-          onChange={changeRole}
-          color={theme.solid}
-        />
+            <Entrance index={1}>
+              <Segmented label="Part" options={roleOptions} value={role} onChange={d.setRole} testID="role-switch" />
+            </Entrance>
 
-        {!pattern ? (
-          <Card style={{ marginTop: 12, gap: 10 }}>
-            <Text style={s.hint}>
-              This dance has no follower part yet. Generate it from the leader&apos;s steps (partners facing each other, the
-              follower mirrors the leader), or draw it yourself.
-            </Text>
-            <Button label="Generate from leader" variant="primary" onPress={() => createFollower('mirror')} />
-            <Button label="Start empty" onPress={() => createFollower('empty')} />
-          </Card>
-        ) : (
-          <>
-            <Card style={{ marginTop: 12, padding: 6 }}>
-              <StepDiagram
-                pattern={pattern}
-                theme={theme}
-                footStyle={footStyle}
-                mode="live"
-                frame={frame}
-                bounds={bounds}
-                grid
-                maxHeight={380}
-                onTouch={onTouch}
-                onTouchEnd={() => {
-                  setScrollEnabled(true);
-                  setBounds(editorBounds(pattern));
-                }}
-              />
-            </Card>
-            <Text style={[s.hint, { marginTop: 8 }]}>{hint}</Text>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.strip}>
-              <StepChip label="Start" active={sel === -1} color={theme.solid} onPress={() => setSel(-1)} />
-              {pattern.steps.map((st, i) => (
-                <StepChip
-                  key={st.id}
-                  label={`${st.count} ${st.kind === 'hold' ? '·' : st.foot}`}
-                  active={sel === i}
-                  color={theme.solid}
-                  onPress={() => setSel(i)}
-                />
-              ))}
-              <StepChip label="+ Add" active={false} color={theme.solid} onPress={addStep} dashed />
-            </ScrollView>
-
-            <Card style={{ gap: 12 }}>
-              {sel < 0 ? (
-                <>
-                  <Text style={s.label}>Place which foot?</Text>
-                  <Segmented
-                    options={[
-                      { value: 'L', label: 'Left' },
-                      { value: 'R', label: 'Right' },
-                    ]}
-                    value={startFoot}
-                    onChange={setStartFoot}
-                    color={theme.solid}
+            {!pattern ? (
+              <Entrance index={2}>
+                <FollowerSetupCard onCreate={d.createFollower} />
+              </Entrance>
+            ) : (
+              <>
+                <Entrance index={2} style={s.work}>
+                  <EditorCanvas
+                    key={role}
+                    pattern={pattern}
+                    role={role}
+                    footStyle={draft.footStyle?.[role] ?? DEFAULT_FOOT_STYLE[role]}
+                    tone={tone}
+                    sel={sel}
+                    startFoot={startFoot}
+                    height={canvasH}
+                    onDragStart={d.beginDrag}
+                    onDragMove={d.dragTo}
+                    onDragEnd={d.endDrag}
+                    onBlockedTouch={() => setBlocked(true)}
+                    onPressChange={setPressing}
                   />
-                  <RotateRow onRotate={rotate} />
-                  <Text style={s.label}>Footprint style</Text>
-                  <Segmented
-                    options={[
-                      { value: 'shoe', label: 'Flat shoe' },
-                      { value: 'heel', label: 'Heel' },
-                    ]}
-                    value={footStyle}
-                    onChange={(v) => update({ footStyle: { ...draft.footStyle, [role]: v } })}
-                    color={theme.solid}
-                  />
-                  <Button label="+ Add first step" variant="primary" onPress={addStep} />
-                </>
-              ) : selected ? (
-                <>
-                  <Text style={s.desc}>{describeStep(selected, states[sel])}</Text>
-                  <View style={s.fieldRow}>
-                    <View style={{ flex: 1 }}>
-                      <Field label="Count" value={selected.count} onChange={(count) => updateStep(sel, { count })} />
-                    </View>
-                    <View style={{ flex: 2 }}>
-                      <Text style={s.label}>Length</Text>
-                      <Segmented
-                        options={[
-                          { value: '0.5', label: '½' },
-                          { value: '1', label: '1' },
-                          { value: '2', label: '2' },
-                        ]}
-                        value={String(selected.beats) as '0.5' | '1' | '2'}
-                        onChange={(v) => updateStep(sel, { beats: Number(v) })}
-                        color={colors.text}
-                      />
-                    </View>
+                  <View style={s.hintRow}>
+                    <CoachHint text={hint} role={role} />
+                    <RotateTray onRotate={d.rotate} disabled={step?.kind === 'hold'} />
                   </View>
-                  <Text style={s.label}>Foot</Text>
-                  <Segmented
-                    options={[
-                      { value: 'L', label: 'Left' },
-                      { value: 'R', label: 'Right' },
-                    ]}
-                    value={selected.foot}
-                    onChange={changeFoot}
-                    color={theme.solid}
-                  />
-                  <Text style={s.label}>Action</Text>
-                  <Segmented
-                    options={[
-                      { value: 'step', label: 'Step' },
-                      { value: 'tap', label: 'Tap' },
-                      { value: 'hold', label: 'Hold' },
-                    ]}
-                    value={selected.kind}
-                    onChange={changeKind}
-                    color={colors.text}
-                  />
-                  {selected.kind !== 'hold' && <RotateRow onRotate={rotate} />}
-                  <Field
-                    label="Note (optional)"
-                    value={selected.note ?? ''}
-                    onChange={(note) => updateStep(sel, { note: note || undefined })}
-                    placeholder="e.g. ball of the foot, hip action"
-                  />
-                  <View style={s.fieldRow}>
-                    <Button small label="◀ Move" onPress={() => moveStep(-1)} style={{ flex: 1 }} />
-                    <Button small label="Move ▶" onPress={() => moveStep(1)} style={{ flex: 1 }} />
-                    <Button small label="Delete" variant="danger" onPress={deleteStep} style={{ flex: 1 }} />
-                  </View>
-                  <Button label="+ Add next step" variant="primary" onPress={addStep} />
-                </>
-              ) : null}
-            </Card>
+                  <StepStrip steps={pattern.steps} role={role} sel={sel} onSelect={select} onAdd={d.addStep} />
+                </Entrance>
 
-            {role === 'follower' && (
-              <View style={{ gap: 10, marginTop: 16 }}>
-                <Button label="Regenerate follower from leader" onPress={() => createFollower('mirror')} />
-                <Button label="Remove follower part" variant="danger" onPress={removeFollower} />
-              </View>
+                <Entrance index={3}>
+                  <Inspector
+                    role={role}
+                    steps={pattern.steps}
+                    sel={sel}
+                    before={states[Math.max(0, sel)] ?? states[0]}
+                    startFoot={startFoot}
+                    onStartFoot={d.setStartFoot}
+                    onAdd={d.addStep}
+                    onUpdate={d.updateStep}
+                    onCountBlur={onCountBlur}
+                    onFoot={d.setFoot}
+                    onKind={d.setKind}
+                    onMove={d.moveStep}
+                    onDelete={deleteStep}
+                    onSeal={d.seal}
+                  />
+                </Entrance>
+
+                {role === 'follower' && <FollowerToolsCard onRegenerate={regenerate} onRemove={removeFollower} />}
+              </>
             )}
-            <Text style={[s.hint, { marginTop: 16 }]}>
-              Tip: the dancer faces the top of the screen. {ROLE_LABEL[role]} steps are shown from the dancer&apos;s own point of view.
-            </Text>
-          </>
-        )}
+          </RevealProvider>
+        </View>
       </ScrollView>
     </Screen>
   );
 }
 
-function RotateRow({ onRotate }: { onRotate: (deg: number) => void }) {
-  return (
-    <View style={s.fieldRow}>
-      <Button small label="⟲ 45°" onPress={() => onRotate(-45)} style={{ flex: 1 }} />
-      <Button small label="⟲ 15°" onPress={() => onRotate(-15)} style={{ flex: 1 }} />
-      <Button small label="15° ⟳" onPress={() => onRotate(15)} style={{ flex: 1 }} />
-      <Button small label="45° ⟳" onPress={() => onRotate(45)} style={{ flex: 1 }} />
-    </View>
-  );
-}
-
-function StepChip({
-  label,
-  active,
-  color,
-  onPress,
-  dashed,
-}: {
-  label: string;
-  active: boolean;
-  color: string;
-  onPress: () => void;
-  dashed?: boolean;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[
-        s.chip,
-        dashed && { borderStyle: 'dashed', borderColor: color },
-        active && { backgroundColor: color, borderColor: color },
-      ]}
-    >
-      <Text style={[s.chipText, active && { color: colors.onColor }, dashed && { color }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  multiline,
-  keyboardType,
-  onBlur,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-  keyboardType?: 'default' | 'number-pad' | 'url';
-  onBlur?: () => void;
-}) {
-  return (
-    <View style={{ marginBottom: 8 }}>
-      <Text style={s.label}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        placeholderTextColor={colors.ink3}
-        multiline={multiline}
-        keyboardType={keyboardType}
-        autoCapitalize={keyboardType === 'url' ? 'none' : 'sentences'}
-        style={[s.input, multiline && { minHeight: 70, textAlignVertical: 'top' }]}
-      />
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 60 },
-  fieldRow: { flexDirection: 'row', gap: 8 },
-  label: { fontSize: 12, fontWeight: '700', color: colors.muted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 15,
-    color: colors.text,
-    backgroundColor: colors.card,
-  },
-  hint: { fontSize: 13, color: colors.muted, lineHeight: 18 },
-  desc: { fontSize: 15, fontWeight: '600', color: colors.text },
-  strip: { gap: 8, paddingVertical: 12 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  chipText: { fontSize: 14, fontWeight: '700', color: colors.text },
+  content: { paddingHorizontal: space.gutter, paddingTop: space.s, paddingBottom: space.xxl * 2 },
+  stack: { gap: space.l },
+  work: { gap: space.m },
+  hintRow: { flexDirection: 'row', alignItems: 'center', gap: space.m },
+  loadingStage: { marginTop: space.l },
+  notFound: { marginTop: space.xl },
 });

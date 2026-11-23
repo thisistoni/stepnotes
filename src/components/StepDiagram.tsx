@@ -124,6 +124,8 @@ export const StepDiagram = memo(function StepDiagram({
   // --- touch handling (editor) --------------------------------------------------------
   const containerRef = useRef<ComponentRef<typeof View>>(null);
   const origin = useRef({ x: 0, y: 0 });
+  /** Set while the grant's measure() is pending: the latest move and whether the touch ended. */
+  const held = useRef<{ move: { x: number; y: number } | null; ended: boolean } | null>(null);
   const geom = useRef({ size, bounds });
   const onTouchRef = useRef(onTouch);
   const onTouchEndRef = useRef(onTouchEnd);
@@ -150,14 +152,30 @@ export const StepDiagram = memo(function StepDiagram({
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
         const { pageX, pageY } = e.nativeEvent;
+        // measure() can be async (web): hold back moves / the release until the grant point is
+        // out, so the editor receives the touch in order (first point, moves, end).
+        const pending: { move: { x: number; y: number } | null; ended: boolean } = { move: null, ended: false };
+        held.current = pending;
         containerRef.current?.measure((_x, _y, _w, _h, px, py) => {
           origin.current = { x: px, y: py };
+          held.current = null;
           emit(pageX, pageY);
+          if (pending.move) emit(pending.move.x, pending.move.y);
+          if (pending.ended) onTouchEndRef.current?.();
         });
       },
-      onPanResponderMove: (e) => emit(e.nativeEvent.pageX, e.nativeEvent.pageY),
-      onPanResponderRelease: () => onTouchEndRef.current?.(),
-      onPanResponderTerminate: () => onTouchEndRef.current?.(),
+      onPanResponderMove: (e) => {
+        if (held.current) held.current.move = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+        else emit(e.nativeEvent.pageX, e.nativeEvent.pageY);
+      },
+      onPanResponderRelease: () => {
+        if (held.current) held.current.ended = true;
+        else onTouchEndRef.current?.();
+      },
+      onPanResponderTerminate: () => {
+        if (held.current) held.current.ended = true;
+        else onTouchEndRef.current?.();
+      },
     });
   });
 
