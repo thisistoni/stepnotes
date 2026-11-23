@@ -70,6 +70,7 @@ export { SVG_FONT };
 export const MIN_LABEL_PX = 11;
 /** L / R letters never render smaller than this (px). */
 const MIN_LETTER_PX = 11;
+const EMPTY_BOUNDS: Bounds = { minX: -3, minY: -3, maxX: 3, maxY: 3 };
 
 export interface StepDiagramProps {
   pattern: Pattern;
@@ -170,15 +171,17 @@ export const StepDiagram = memo(function StepDiagram({
   // (ghosts + arrows) may lag a frame behind so the dragged foot itself stays responsive.
   const layoutPattern = useDeferredValue(pattern);
   const animated = mode === 'live' && !!beat;
-  const ghostMode = ghosts ?? (animated ? 'focus' : 'all');
-  // The live editor canvas (fixed bounds) never shows labels: skip placing them.
-  const needLabels = !(mode === 'live' && fixedBounds);
+  const ghostMode = ghosts ?? 'focus';
   const states = useMemo(() => computeStates(layoutPattern), [layoutPattern]);
+  // the printed-chart layout (arrow / label placement) is only needed for the chart
   const layout = useMemo(
-    () => layoutChart(layoutPattern, states, { labels: needLabels && !animated }),
-    [layoutPattern, states, needLabels, animated],
+    () => (mode === 'overview' ? layoutChart(layoutPattern, states) : { feet: [], arrows: [], bounds: EMPTY_BOUNDS }),
+    [mode, layoutPattern, states],
   );
-  const live = useMemo(() => (animated ? layoutLive(layoutPattern, states) : null), [animated, layoutPattern, states]);
+  // live layout: cheap, so a fixed pose (the editor dragging a foot) uses the CURRENT pattern and
+  // its arrow follows the finger without lagging a frame behind
+  const livePattern = animated ? layoutPattern : pattern;
+  const live = useMemo(() => (mode === 'live' ? layoutLive(livePattern, computeStates(livePattern)) : null), [mode, livePattern]);
   const timeline = useMemo(() => (beat ? buildTimeline(pattern) : null), [beat, pattern]);
   const turns = useMemo(
     () =>
@@ -315,16 +318,19 @@ export const StepDiagram = memo(function StepDiagram({
             />
           )
         ) : (
-          <StaticPose
-            layout={layout}
-            viewBox={viewBox}
-            theme={theme}
-            footStyle={footStyle}
-            showLetters={showLetters}
-            showLabel={needLabels}
-            letterSize={letterSize}
-            frame={frame ?? { index: -1, feet: pattern.start, weight: null, progress: 1 }}
-          />
+          live && (
+            <StaticPose
+              live={live}
+              ghostMode={ghostMode}
+              viewBox={viewBox}
+              theme={theme}
+              footStyle={footStyle}
+              showLetters={showLetters}
+              letterSize={letterSize}
+              unit={unit}
+              frame={frame ?? { index: -1, feet: pattern.start, weight: null, progress: 1 }}
+            />
+          )
         ))}
     </View>
   );
@@ -826,29 +832,62 @@ const FootSvg = memo(function FootSvg(props: {
 
 // --- live layer: fixed pose ------------------------------------------------------------------
 
+/** How many earlier positions a fixed pose (the editor) keeps as a faint trail. */
+const TRAIL = 3;
+
+/**
+ * A fixed pose (the editor): the same focus hierarchy as playback around step `frame.index`
+ * (its arrow beside the foot's path + badge, where the foot came from, the next destination),
+ * plus a faint trail of the few positions before it. Later positions stay barely visible.
+ */
 const StaticPose = memo(function StaticPose({
-  layout,
+  live,
+  ghostMode,
   viewBox,
   theme,
   footStyle,
   showLetters,
-  showLabel,
   letterSize,
+  unit,
   frame,
 }: {
-  layout: ChartLayout;
+  live: LiveLayout;
+  ghostMode: 'focus' | 'all';
   viewBox: string;
   theme: RoleTheme;
   footStyle: FootStyle;
   showLetters: boolean;
-  showLabel: boolean;
   letterSize: number;
+  unit: number;
   frame: Frame;
 }) {
-  const current = layout.arrows.find((a) => a.index === frame.index);
+  const index = Math.min(frame.index, live.steps.length - 1);
+  const trail: LiveStep[] = [];
+  if (ghostMode === 'focus') {
+    for (let k = index - 1; k >= 0 && trail.length < TRAIL; k--) {
+      const st = live.steps[k];
+      if (st.kind === 'hold') continue;
+      const covered = (['L', 'R'] as Foot[]).some((f) => samePos(frame.feet[f], st.to));
+      const cur = live.steps[index];
+      if (covered || (cur && samePos(cur.from, st.to)) || trail.some((t) => samePos(t.to, st.to))) continue;
+      trail.push(st);
+    }
+  }
   return (
     <Svg width="100%" height="100%" viewBox={viewBox} style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
-      {current && <ArrowGlyph arrow={current} color={theme.activeArrow} theme={theme} strong showLabel={showLabel} unit={0} />}
+      {trail.map((t, k) => (
+        <FootShape
+          key={`t${k}`}
+          foot={t.foot}
+          pos={t.to}
+          style={footStyle}
+          color={theme.ghostOrigin ?? theme.ghost}
+          ghostWidth={Math.max(0.06, 1.4 * unit)}
+          opacity={1 - k * 0.22}
+          outline
+        />
+      ))}
+      <FocusUnder live={live} index={index} theme={theme} footStyle={footStyle} unit={unit} ghostMode={ghostMode} letterSize={letterSize} />
       {(['L', 'R'] as Foot[]).map((f) => {
         const solid = frame.weight === null || frame.weight === f;
         return (
@@ -866,6 +905,7 @@ const StaticPose = memo(function StaticPose({
           />
         );
       })}
+      <FocusOver live={live} index={index} theme={theme} unit={unit} />
     </Svg>
   );
 });
