@@ -671,6 +671,13 @@ function distToSeg(p: Vec, a: Vec, b: Vec) {
   return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
 }
 
+/**
+ * Shortest double-headed (weight change) arrow for a head size. On a small stage the heads grow
+ * relative to the arrow; without this the two heads meet in the middle and read as an "X", not as
+ * an up-and-down arrow. Keeps a visible shaft of about 1.5 heads between them.
+ */
+const doubleArrowMin = (head: number) => head * 3.5;
+
 /** Shortest current-step arrow on screen (px): below this a closing step is all arrowhead. */
 const LIVE_MIN_ARROW_PX = 26;
 
@@ -750,6 +757,20 @@ function liveGlyph(step: LiveStep, unit: number, bounds?: Bounds) {
         ].find((p) => inside(p) && clearance(p) >= 0);
         if (alt) badge = alt;
       }
+    }
+  } else {
+    const e = (doubleArrowMin(head) - len) / 2;
+    if (e > 0) {
+      a = { x: a.x - u.x * e, y: a.y - u.y * e };
+      b = { x: b.x + u.x * e, y: b.y + u.y * e };
+    }
+    // the badge sits beside the shaft; when it has grown on a small stage, keep it off the stroke
+    const n = { x: -u.y, y: u.x };
+    const off = n.x * (badge.x - a.x) + n.y * (badge.y - a.y);
+    const short = r + width / 2 + 0.04 - Math.abs(off);
+    if (short > 0) {
+      const s = Math.sign(off) || 1;
+      badge = { x: badge.x + n.x * s * short, y: badge.y + n.y * s * short };
     }
   }
   return { a, b, u, badge, r, width, head };
@@ -1048,7 +1069,8 @@ function arrowPath({ a, b, c, c2 }: ChartArrow) {
  * it crosses a foot or another arrow), then every arrow in its colour on top.
  */
 function ArrowGlyph({ arrow, color, sw, halo }: { arrow: ChartArrow; color: string; sw: number; halo?: number }) {
-  const { a, b, c, c2 } = arrow;
+  const { c, c2 } = arrow;
+  let { a, b } = arrow;
   // a curved arrow arrives along its (last) control point → tip direction
   const from = c2 ?? c ?? a;
   const len = Math.hypot(b.x - from.x, b.y - from.y) || 1;
@@ -1057,9 +1079,17 @@ function ArrowGlyph({ arrow, color, sw, halo }: { arrow: ChartArrow; color: stri
   const dash = arrow.dashed && !halo ? `${Math.max(0.22, sw * 2)} ${Math.max(0.18, sw * 1.8)}` : undefined;
   const line = { stroke: color, strokeWidth: width, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
   const head = Math.max(0.3, sw * 2.6);
+  if (arrow.type === 'inPlace') {
+    // straight by construction: keep the two heads apart on a small chart
+    const e = (doubleArrowMin(head) - len) / 2;
+    if (e > 0) {
+      a = { x: a.x - u.x * e, y: a.y - u.y * e };
+      b = { x: b.x + u.x * e, y: b.y + u.y * e };
+    }
+  }
   return (
     <G>
-      <Path d={arrowPath(arrow)} {...line} strokeDasharray={dash} />
+      <Path d={arrowPath({ ...arrow, a, b })} {...line} strokeDasharray={dash} />
       <Path d={arrowHead(b, u, head)} {...line} />
       {arrow.type === 'inPlace' && <Path d={arrowHead(a, { x: -u.x, y: -u.y }, head)} {...line} />}
     </G>
