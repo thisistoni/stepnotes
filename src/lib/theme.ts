@@ -311,6 +311,12 @@ export interface RoleTheme {
   grid: string;
   /** Editor grid axis lines (x = 0, y = 0) */
   gridAxis: string;
+  /** Live view: every other position of the pattern, barely visible (context only). Default `ghost`. */
+  ghostRest?: string;
+  /** Live view: where the moving foot came from (very faint). Default `ghost`. */
+  ghostOrigin?: string;
+  /** Live view: the next step's destination outline (faint, role tinted). Default `label`. */
+  ghostNext?: string;
 }
 
 const DIAGRAM_NEUTRAL = {
@@ -322,6 +328,8 @@ const DIAGRAM_NEUTRAL = {
   letterOnSolid: P.white,
   grid: withAlpha(P.ink, 0.08),
   gridAxis: withAlpha(P.ink, 0.18),
+  ghostRest: withAlpha(P.ink, 0.16),
+  ghostOrigin: withAlpha(P.ink, 0.3),
 };
 
 export const ROLE_THEME: Record<Role, RoleTheme> = {
@@ -335,6 +343,7 @@ export const ROLE_THEME: Record<Role, RoleTheme> = {
     activeArrow: P.greenLip,
     badge: P.green,
     letterOnLight: P.greenDeep,
+    ghostNext: withAlpha(P.greenLip, 0.55),
   },
   follower: {
     ...DIAGRAM_NEUTRAL,
@@ -346,6 +355,7 @@ export const ROLE_THEME: Record<Role, RoleTheme> = {
     activeArrow: P.pinkLip,
     badge: P.pink,
     letterOnLight: P.pinkDeep,
+    ghostNext: withAlpha(P.pinkLip, 0.55),
   },
 };
 

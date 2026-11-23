@@ -1,55 +1,112 @@
-import * as Haptics from 'expo-haptics';
+/**
+ * Player — the heart of the app: the stage (animated diagram or chart), the count block, the
+ * transport, tempo, practice toggles and the list of all steps.
+ *
+ * Render budget: the screen re-renders once per step at most (usePlayback's `index`); the feet,
+ * the ring and the arrow glide run on the UI thread from the shared `beat`.
+ */
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Speech from 'expo-speech';
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
-import type { SharedValue } from 'react-native-reanimated';
+import { useCallback, useMemo, useState } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useDerivedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { StepDiagram } from '@/components/StepDiagram';
-import { Button, Card, Segmented, SectionTitle, Toggle } from '@/components/legacyUi';
-import { Header, IconButton, Screen } from '@/components/ui';
-import { computeStates, describeStep, mirrorPattern, stepStartBeats, totalBeats } from '@/lib/pattern';
+import { AboutCard } from '@/components/player/AboutCard';
+import { ChartControls, chartControlsHeight } from '@/components/player/ChartControls';
+import { CountBlock, countBlockHeight, type CountLine } from '@/components/player/CountBlock';
+import { PLAYER_HEADER_H, PlayerHeader } from '@/components/player/PlayerHeader';
+import { PlayerStage, type ChartBar, type StageMode, type StageRole } from '@/components/player/PlayerStage';
+import { PlayerToggles } from '@/components/player/PlayerToggles';
+import { shareDance } from '@/components/player/shareDance';
+import { StepList } from '@/components/player/StepList';
+import { TempoControl } from '@/components/player/TempoControl';
+import { Transport, transportHeight } from '@/components/player/Transport';
+import { usePauseSilence, usePlayerCues } from '@/components/player/usePlayerCues';
+import {
+  EmptyState,
+  FootSticker,
+  goBackOrHome,
+  Header,
+  IconButton,
+  Menu,
+  Screen,
+  Segmented,
+  useConfirm,
+  useReducedMotion,
+  useToast,
+  type MenuItem,
+} from '@/components/ui';
+import { barRanges, computeStates, describeStep, describeStepShort, mirrorPattern, stepStartBeats, totalBeats } from '@/lib/pattern';
 import { usePrefs } from '@/lib/prefs';
-import { exportJson, useDances } from '@/lib/store';
-import { DEFAULT_FOOT_STYLE, ROLE_THEME, colors } from '@/lib/theme';
-import { ROLE_LABEL, type Dance, type Pattern, type Role } from '@/lib/types';
+import { useDances } from '@/lib/store';
+import { DEFAULT_FOOT_STYLE, ROLE_COLOR, space, styleColor, TONE } from '@/lib/theme';
+import type { Dance, Pattern, Role } from '@/lib/types';
 import { usePlayback } from '@/lib/usePlayback';
 
 type RoleView = Role | 'both';
-const SPEEDS = ['0.5', '0.75', '1', '1.25'] as const;
 
 export default function DancePlayerRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { get, ready } = useDances();
   const prefsReady = usePrefs().ready;
-  const dance = get(id);
+  // while a delete is in flight the dance vanishes from the store before the screen has left:
+  // keep drawing it instead of flashing "not found"
+  const [leaving, setLeaving] = useState<Dance | null>(null);
+  const dance = get(id) ?? leaving ?? undefined;
 
-  if (!ready || !prefsReady) {
-    return <Screen header={<Header />} />;
-  }
+  if (!ready || !prefsReady) return <Screen header={<Header />} testID="player-loading" />;
   if (!dance) {
     return (
-      <Screen header={<Header title="Not found" />} contentStyle={{ gap: 12 }}>
-        <Text>This dance does not exist anymore.</Text>
-        <Button label="Go to library" onPress={() => router.replace('/')} />
+      <Screen header={<Header />} testID="player-not-found" contentStyle={s.notFound}>
+        <EmptyState
+          art={
+            <>
+              <FootSticker size={40} tone={TONE.neutral} rotate={-10} />
+              <FootSticker size={40} foot="R" tone={TONE.neutral} rotate={10} />
+            </>
+          }
+          title="This dance isn't here anymore"
+          body="It may have been deleted. Your other dances are in the library."
+          action={{ label: 'Back to library', icon: 'back', onPress: () => router.replace('/'), testID: 'back-to-library' }}
+        />
       </Screen>
     );
   }
-  return <DancePlayer dance={dance} />;
+  return <DancePlayer key={dance.id} dance={dance} onLeaving={setLeaving} />;
 }
 
-function DancePlayer({ dance }: { dance: Dance }) {
-  const { duplicate, remove } = useDances();
+const HEADER_H = PLAYER_HEADER_H;
+const ROLE_SEG_H = 46 + space.xs;
+const STAGE_MT = space.m;
+const COUNT_MT = 14;
+const TRANSPORT_MT = 6;
+const BOTTOM_GAP = space.m;
+const STAGE_MIN = 168;
+const STAGE_MAX = 410;
+const CHART_MT = space.l;
+
+function DancePlayer({ dance, onLeaving }: { dance: Dance; onLeaving: (d: Dance | null) => void }) {
+  const { duplicate, remove, restore, isBuiltIn } = useDances();
   const { prefs, set } = usePrefs();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const reduced = useReducedMotion();
+  const insets = useSafeAreaInsets();
+  const { height: winH, width: winW } = useWindowDimensions();
+  const narrow = winW < 360;
+  // short screens (iPhone SE and the like) get a smaller count tile and transport
+  const compact = narrow || winH - insets.top - insets.bottom < 700;
 
-  const [roleView, setRoleView] = useState<RoleView>(() =>
-    prefs.preferredRole === 'follower' && dance.roles.follower ? 'follower' : 'leader',
-  );
-  const [mode, setMode] = useState<'live' | 'overview'>('live');
+  const hasFollower = !!dance.roles.follower;
+  const [roleView, setRoleView] = useState<RoleView>(() => (prefs.preferredRole === 'follower' && hasFollower ? 'follower' : 'leader'));
+  const view: RoleView = hasFollower ? roleView : 'leader';
+  const [mode, setMode] = useState<StageMode>('live');
   const [mirror, setMirror] = useState(false);
-  const speed = prefs.speed;
+  const [listRole, setListRole] = useState<Role>('leader');
+  // live tempo while dragging; persisted on release
+  const [dragSpeed, setDragSpeed] = useState<number | null>(null);
+  const speed = dragSpeed ?? Math.min(1.25, Math.max(0.5, prefs.speed));
 
-  const roles: Role[] = roleView === 'both' ? ['leader', 'follower'] : [roleView];
   const patterns = useMemo(() => {
     const out: Partial<Record<Role, Pattern>> = {};
     (['leader', 'follower'] as Role[]).forEach((r) => {
@@ -59,260 +116,276 @@ function DancePlayer({ dance }: { dance: Dance }) {
     return out;
   }, [dance, mirror]);
 
-  const primaryRole: Role = roleView === 'follower' ? 'follower' : 'leader';
-  const primary = patterns[primaryRole] ?? dance.roles.leader;
-  const total = useMemo(
-    () => Math.max(...roles.map((r) => (patterns[r] ? totalBeats(patterns[r]!) : 0)), 0),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [patterns, roleView],
-  );
+  const primaryRole: Role = view === 'follower' ? 'follower' : 'leader';
+  const primary = patterns[primaryRole] ?? patterns.leader!;
+  const shownRoles: Role[] = view === 'both' ? ['leader', 'follower'] : [primaryRole];
   const starts = useMemo(() => stepStartBeats(primary), [primary]);
+  const total = useMemo(
+    () => Math.max(0, ...shownRoles.map((r) => (patterns[r] ? totalBeats(patterns[r]!) : 0))),
+    // shownRoles is derived from `view`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [patterns, view],
+  );
   const bpm = dance.bpm * speed;
-  const primaryStates = useMemo(() => computeStates(primary), [primary]);
+  const steps = primary.steps;
+  const canPlay = steps.length > 0;
 
-  // say the count / vibrate on every new step while playing
-  const onStep = (i: number) => {
-    const step = primary.steps[i];
-    if (!step) return;
-    if (prefs.haptics && step.kind !== 'hold' && Platform.OS !== 'web') {
-      Haptics.impactAsync(step.kind === 'tap' ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
+  const onStep = usePlayerCues({ steps, speak: prefs.speakCounts, vibrate: prefs.haptics, bpm });
+  const pb = usePlayback({ totalBeats: total, bpm, stepStartBeats: starts, loop: prefs.loop, onStep });
+  usePauseSilence(pb.playing);
+  const index = Math.min(pb.index, steps.length - 1);
+
+  const progress = useDerivedValue(() => {
+    const b = pb.beat.get();
+    return total > 0 && b > 0 ? Math.min(1, b / total) : 0;
+  });
+
+  const bars = useMemo(() => barRanges(primary, dance.beatsPerBar), [primary, dance.beatsPerBar]);
+  const [chartBar, setChartBar] = useState<ChartBar>(0);
+  const effectiveBar: ChartBar = bars.length <= 1 ? 'all' : chartBar === 'all' || bars.some((b) => b.bar === chartBar) ? chartBar : bars[0].bar;
+
+  const states = useMemo(() => {
+    const out: Partial<Record<Role, ReturnType<typeof computeStates>>> = {};
+    shownRoles.forEach((r) => patterns[r] && (out[r] = computeStates(patterns[r]!)));
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patterns, view]);
+
+  const lines: CountLine[] = shownRoles.map((r) => {
+    const p = patterns[r]!;
+    const st = index >= 0 ? (p.steps[index] ?? null) : null;
+    const text = st
+      ? (shownRoles.length > 1 ? describeStepShort : describeStep)(st, states[r]![index])
+      : p.steps.length === 0
+        ? 'Nothing to play yet'
+        : shownRoles.length > 1
+          ? 'Start position'
+          : 'Start position. Press play or step through.';
+    return { role: r, step: st, text };
+  });
+
+  const stageRoles: StageRole[] = shownRoles.map((r) => ({
+    role: r,
+    pattern: patterns[r]!,
+    footStyle: dance.footStyle?.[r] ?? DEFAULT_FOOT_STYLE[r],
+    synced: r === primaryRole || sameStarts(stepStartBeats(patterns[r]!), starts),
+  }));
+
+  // --- actions ------------------------------------------------------------------------------
+  const { stepTo, pause } = pb;
+  const go = useCallback((i: number) => stepTo(i, { glide: !reduced }), [reduced, stepTo]);
+  const onPrev = useCallback(() => go(Math.max(-1, index - 1)), [go, index]);
+  const onNext = useCallback(() => go(index + 1 >= steps.length ? -1 : index + 1), [go, index, steps.length]);
+  const onJump = useCallback(
+    (i: number) => {
+      setMode('live');
+      go(i);
+    },
+    [go],
+  );
+  const onModeChange = (m: StageMode) => {
+    if (m === 'overview') {
+      pause();
+      // open the chart on the bar being practised
+      const cur = bars.find((b) => index >= b.from && index < b.to);
+      if (cur && bars.length > 1) setChartBar(cur.bar);
     }
-    if (prefs.speakCounts) {
-      Speech.stop();
-      Speech.speak(step.count === '&' ? 'and' : step.count, { rate: Math.min(2, 0.9 + bpm / 200) });
+    setMode(m);
+  };
+  const setPref = useCallback((patch: Parameters<typeof set>[0]) => void set(patch), [set]);
+  const onTempo = useCallback((v: number) => setDragSpeed(v), []);
+  const onTempoCommit = useCallback(
+    (v: number) => {
+      setDragSpeed(null);
+      void set({ speed: v });
+    },
+    [set],
+  );
+
+  const builtIn = !!dance.builtIn || isBuiltIn(dance.id);
+  const makeOwn = useCallback(() => {
+    pause();
+    router.push(`/edit/new?from=${encodeURIComponent(dance.id)}`);
+  }, [pause, dance.id]);
+  const edit = useCallback(() => {
+    pause();
+    router.push(`/edit/${dance.id}`);
+  }, [pause, dance.id]);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const name = dance.name.trim() || 'Untitled dance';
+  const onDuplicate = async () => {
+    try {
+      const copy = await duplicate(dance);
+      toast.show({ message: 'Copy saved to My dances', icon: 'copy', action: { label: 'Open', onPress: () => router.push(`/dance/${copy.id}`) } });
+    } catch {
+      toast.show({ message: 'Could not copy this dance. Please try again.', icon: 'alert' });
     }
   };
-  const playback = usePlayback({ totalBeats: total, bpm, stepStartBeats: starts, loop: prefs.loop, onStep });
-  const index = playback.index;
-
-  useEffect(() => () => void Speech.stop(), []);
-
-  const step = index >= 0 ? primary.steps[index] : null;
-  const theme = ROLE_THEME[primaryRole];
-
-  const goTo = playback.seekToStep;
-  const prev = () => goTo(Math.max(-1, index - 1));
-  const next = () => goTo(index + 1 >= primary.steps.length ? -1 : index + 1);
-
-  const onShare = () => Share.share({ title: dance.name, message: exportJson(dance) });
-  const onEditCopy = async () => {
-    const copy = await duplicate(dance);
-    router.replace(`/edit/${copy.id}`);
-  };
-  const onDelete = () => {
-    const doIt = async () => {
-      await remove(dance.id);
-      // deep link / web reload: there may be no screen to go back to
-      if (router.canGoBack()) router.back();
-      else router.replace('/');
-    };
-    if (Platform.OS === 'web') {
-      if (confirm(`Delete “${dance.name}”?`)) doIt();
-      return;
+  const onDelete = async () => {
+    pause();
+    const ok = await confirm({
+      title: `Delete “${name}”?`,
+      message: 'It will be removed from My dances. You can undo this right after.',
+      confirmLabel: 'Delete',
+      destructive: true,
+      icon: 'trash',
+    });
+    if (!ok) return;
+    onLeaving(dance);
+    try {
+      const removed = await remove(dance.id);
+      goBackOrHome();
+      if (removed) {
+        toast.show({ message: `Deleted “${name}”`, icon: 'trash', action: { label: 'Undo', onPress: () => void restore(removed) } });
+      }
+    } catch {
+      onLeaving(null);
+      toast.show({ message: 'Could not delete this dance. Please try again.', icon: 'alert' });
     }
-    Alert.alert('Delete dance', `Delete “${dance.name}”? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: doIt },
-    ]);
   };
+  const menuItems: MenuItem[] = [
+    builtIn
+      ? { key: 'own', label: 'Make my own version', hint: 'Opens the editor on a copy', icon: 'pencil', onPress: makeOwn }
+      : { key: 'edit', label: 'Edit steps', icon: 'pencil', onPress: edit },
+    { key: 'dup', label: 'Duplicate', hint: 'Save a copy to My dances', icon: 'copy', onPress: onDuplicate },
+    { key: 'share', label: 'Share', hint: 'Send it as text', icon: 'share', onPress: () => void shareDance(dance, toast.show) },
+    ...(builtIn ? [] : [{ key: 'del', label: 'Delete', icon: 'trash' as const, destructive: true, onPress: onDelete }]),
+  ];
 
-  const roleOptions: { value: RoleView; label: string }[] = dance.roles.follower
-    ? [
-        { value: 'leader', label: 'Leader' },
-        { value: 'follower', label: 'Follower' },
-        { value: 'both', label: 'Both' },
-      ]
-    : [{ value: 'leader', label: 'Steps' }];
+  // --- layout -------------------------------------------------------------------------------
+  // The practice controls (stage, count block, transport) must fit one screen: the stage takes
+  // whatever height is left, within limits. Computed up front, so nothing jumps on first layout.
+  const practiceH = COUNT_MT + countBlockHeight(compact) + TRANSPORT_MT + transportHeight(compact);
+  const fixed = HEADER_H + (hasFollower ? ROLE_SEG_H : 0) + STAGE_MT + practiceH + BOTTOM_GAP;
+  const stageH = Math.round(Math.min(STAGE_MAX, Math.max(STAGE_MIN, winH - insets.top - insets.bottom - fixed)));
+  // Chart mode has no count block / transport: the stage takes their room (the page below stays put)
+  const chartH = chartControlsHeight(bars.length > 1);
+  const stageChartH = stageH + practiceH - (CHART_MT + chartH);
+
+  const meta = [narrow ? '' : `${dance.beatsPerBar}/4`, `${dance.bpm} bpm`].filter(Boolean).join(' · ');
+  const tone = styleColor(dance.style);
+  const role = ROLE_COLOR[primaryRole];
+  const listPatternRole: Role = view === 'both' ? listRole : primaryRole;
 
   return (
-    <Screen scroll={false} padded={false}>
-      <Header
-        title={dance.name || 'Untitled dance'}
-        right={
-          dance.builtIn ? undefined : (
-            <IconButton icon="pencil" label="Edit dance" onPress={() => router.push(`/edit/${dance.id}`)} />
-          )
-        }
-      />
-      <ScrollView contentContainerStyle={s.content}>
-        {roleOptions.length > 1 && (
-          <Segmented options={roleOptions} value={roleView} onChange={setRoleView} color={ROLE_THEME[primaryRole].solid} />
-        )}
+    <Screen
+      testID="player"
+      header={
+        <PlayerHeader
+          title={name}
+          style={dance.style.trim()}
+          meta={meta}
+          dot={tone.base}
+          right={
+            <>
+              {!narrow && (
+                <IconButton
+                  icon="pencil"
+                  label={builtIn ? 'Make my own version' : 'Edit dance'}
+                  onPress={builtIn ? makeOwn : edit}
+                  testID="edit-button"
+                />
+              )}
+              <IconButton icon="more" label="More actions" onPress={() => setMenuOpen(true)} testID="more-button" />
+            </>
+          }
+        />
+      }
+    >
+      {hasFollower && (
+        <Segmented
+          value={view}
+          onChange={setRoleView}
+          label="Part"
+          testID="role-switch"
+          options={[
+            { value: 'leader', label: 'Leader', icon: narrow ? undefined : 'flat-shoe', tone: TONE.primary },
+            { value: 'follower', label: 'Follower', icon: narrow ? undefined : 'heel', tone: TONE.follower },
+            { value: 'both', label: 'Both', tone: TONE.ink },
+          ]}
+          style={s.roleSeg}
+        />
+      )}
 
-        <Card style={{ marginTop: 12, paddingHorizontal: 6 }}>
-          <View style={s.modeRow}>
-            <Segmented
-              options={[
-                { value: 'live', label: 'Animate' },
-                { value: 'overview', label: 'Chart' },
-              ]}
-              value={mode}
-              onChange={setMode}
-              color={colors.text}
+      <View style={s.stage}>
+        <PlayerStage
+          roles={stageRoles}
+          tone={tone}
+          mode={mode}
+          onModeChange={onModeChange}
+          beat={pb.beat}
+          index={index}
+          letters={prefs.showLetters}
+          mirrored={mirror}
+          chartBar={effectiveBar}
+          beatsPerBar={dance.beatsPerBar}
+          height={mode === 'live' ? stageH : stageChartH}
+        />
+      </View>
+
+      {mode === 'live' ? (
+        <>
+          <View style={s.count}>
+            <CountBlock role={primaryRole} steps={steps} bars={bars} index={index} lines={lines} onJump={onJump} compact={compact} />
+          </View>
+          <View style={s.transport}>
+            <Transport
+              playing={pb.playing}
+              progress={progress}
+              tone={role}
+              canPlay={canPlay}
+              canPrev={index >= 0}
+              onToggle={pb.toggle}
+              onPrev={onPrev}
+              onNext={onNext}
+              compact={compact}
             />
           </View>
-          {roles.map((r) =>
-            patterns[r] ? (
-              <View key={r}>
-                {roles.length > 1 && <Text style={[s.roleTag, { color: ROLE_THEME[r].label }]}>{ROLE_LABEL[r]}</Text>}
-                <RoleDiagram
-                  pattern={patterns[r]!}
-                  role={r}
-                  footStyle={dance.footStyle?.[r] ?? DEFAULT_FOOT_STYLE[r]}
-                  mode={mode}
-                  beat={playback.beat}
-                  letters={prefs.showLetters}
-                  maxHeight={roles.length > 1 ? 260 : 400}
-                />
-              </View>
-            ) : null,
-          )}
-          {mirror && <Text style={s.mirrorNote}>Mirrored (left ↔ right)</Text>}
-        </Card>
-
-        {mode === 'live' && (
-          <>
-            <View style={s.countRow}>
-              <Text testID="current-count" style={[s.count, { color: theme.label }]}>{step ? step.count : '–'}</Text>
-              <Text style={s.countDesc}>
-                {step ? describeStep(step, primaryStates[index]) : 'Start position. Press play or step through.'}
-              </Text>
-            </View>
-
-            <View style={s.controls}>
-              <Button label="⏮" onPress={prev} style={s.ctrl} />
-              <Button
-                label={playback.playing ? '❚❚  Pause' : '▶  Play'}
-                variant="primary"
-                onPress={playback.toggle}
-                style={[s.ctrl, { flex: 2, backgroundColor: theme.solid, borderColor: theme.solid }]}
-              />
-              <Button label="⏭" onPress={next} style={s.ctrl} />
-            </View>
-
-            <SectionTitle>Tempo · {Math.round(bpm)} bpm</SectionTitle>
-            <Segmented
-              options={SPEEDS.map((v) => ({ value: v, label: `${Math.round(Number(v) * 100)}%` }))}
-              value={String(speed) as (typeof SPEEDS)[number]}
-              onChange={(v) => set({ speed: Number(v) })}
-              color={colors.text}
-            />
-          </>
-        )}
-
-        <View style={s.toggles}>
-          {mode === 'live' && <Toggle label="Loop" value={prefs.loop} onChange={(loop) => set({ loop })} />}
-          {mode === 'live' && (
-            <Toggle label="Say counts" value={prefs.speakCounts} onChange={(speakCounts) => set({ speakCounts })} />
-          )}
-          {mode === 'live' && Platform.OS !== 'web' && (
-            <Toggle label="Vibrate" value={prefs.haptics} onChange={(haptics) => set({ haptics })} />
-          )}
-          <Toggle label="Mirror" value={mirror} onChange={setMirror} />
-          <Toggle label="L / R" value={prefs.showLetters} onChange={(showLetters) => set({ showLetters })} />
+        </>
+      ) : (
+        <View style={s.chart}>
+          <ChartControls bars={bars} value={effectiveBar} onChange={setChartBar} role={primaryRole} />
         </View>
+      )}
 
-        <SectionTitle>Steps · {ROLE_LABEL[primaryRole]}</SectionTitle>
-        <Card style={{ padding: 0 }}>
-          {primary.steps.map((st, i) => (
-            <Pressable
-              key={st.id}
-              onPress={() => {
-                setMode('live');
-                goTo(i);
-              }}
-              style={[s.stepRow, i === index && { backgroundColor: theme.light + '55' }, i > 0 && s.stepBorder]}
-            >
-              <Text style={[s.stepCount, { color: theme.label }]}>{st.count}</Text>
-              <Text style={s.stepFoot}>{st.kind === 'hold' ? '·' : st.foot}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.stepText}>{describeStep(st, primaryStates[i])}</Text>
-                {!!st.note && <Text style={s.stepNote}>{st.note}</Text>}
-              </View>
-            </Pressable>
-          ))}
-          {primary.steps.length === 0 && <Text style={{ padding: 14, color: colors.muted }}>No steps yet.</Text>}
-        </Card>
+      <View style={s.below}>
+        <TempoControl speed={speed} bpm={dance.bpm} tone={role} onChange={onTempo} onCommit={onTempoCommit} />
+        <PlayerToggles
+          loop={prefs.loop}
+          speak={prefs.speakCounts}
+          mirror={mirror}
+          letters={prefs.showLetters}
+          vibrate={prefs.haptics}
+          setPref={setPref}
+          setMirror={setMirror}
+        />
+        <StepList
+          role={listPatternRole}
+          pattern={patterns[listPatternRole]!}
+          index={listPatternRole === primaryRole || stageRoles.every((r) => r.synced) ? index : -1}
+          onJump={onJump}
+          roleSwitch={view === 'both' ? { value: listRole, onChange: setListRole } : undefined}
+          action={builtIn ? { label: 'Make my own', onPress: makeOwn } : { label: 'Edit steps', onPress: edit }}
+        />
+        <AboutCard dance={dance} />
+      </View>
 
-        {(!!dance.description || !!dance.videoUrl) && (
-          <>
-            <SectionTitle>About</SectionTitle>
-            <Card>
-              {!!dance.description && <Text style={s.about}>{dance.description}</Text>}
-              <Text style={[s.about, { color: colors.muted, marginTop: 6 }]}>
-                {[dance.style, `${dance.bpm} bpm`, `${dance.beatsPerBar}/4`].filter(Boolean).join(' · ')}
-              </Text>
-              {!!dance.videoUrl && (
-                <Button small label="Watch reference video" onPress={() => Linking.openURL(dance.videoUrl!)} style={{ marginTop: 10 }} />
-              )}
-            </Card>
-          </>
-        )}
-
-        <View style={s.actions}>
-          {dance.builtIn ? (
-            <Button label="Make my own version" variant="primary" onPress={onEditCopy} />
-          ) : (
-            <>
-              <Button label="Edit steps" variant="primary" onPress={() => router.push(`/edit/${dance.id}`)} />
-              <Button label="Duplicate" onPress={onEditCopy} />
-            </>
-          )}
-          <Button label="Share as text" onPress={onShare} />
-          {!dance.builtIn && <Button label="Delete" variant="danger" onPress={onDelete} />}
-        </View>
-      </ScrollView>
+      <Menu visible={menuOpen} onClose={() => setMenuOpen(false)} title={name} items={menuItems} />
     </Screen>
   );
 }
 
-function RoleDiagram({
-  pattern,
-  role,
-  footStyle,
-  mode,
-  beat,
-  letters,
-  maxHeight,
-}: {
-  pattern: Pattern;
-  role: Role;
-  footStyle: 'shoe' | 'heel';
-  mode: 'live' | 'overview';
-  beat: SharedValue<number>;
-  letters: boolean;
-  maxHeight: number;
-}) {
-  return (
-    <StepDiagram
-      pattern={pattern}
-      theme={ROLE_THEME[role]}
-      footStyle={footStyle}
-      mode={mode}
-      beat={beat}
-      showLetters={letters}
-      maxHeight={maxHeight}
-    />
-  );
+function sameStarts(a: number[], b: number[]) {
+  return a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 1e-6);
 }
 
 const s = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 48 },
-  modeRow: { paddingHorizontal: 8, marginBottom: 4 },
-  roleTag: { fontSize: 13, fontWeight: '800', marginTop: 8, marginLeft: 10, textTransform: 'uppercase', letterSpacing: 0.6 },
-  mirrorNote: { textAlign: 'center', color: colors.muted, fontSize: 12, marginTop: 4 },
-  countRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 14, minHeight: 64 },
-  count: { fontSize: 52, fontWeight: '800', minWidth: 56, textAlign: 'center' },
-  countDesc: { flex: 1, fontSize: 16, color: colors.text, lineHeight: 22 },
-  controls: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  ctrl: { flex: 1 },
-  toggles: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
-  stepRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, gap: 12 },
-  stepBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  stepCount: { fontSize: 18, fontWeight: '800', width: 28, textAlign: 'center' },
-  stepFoot: { fontSize: 14, fontWeight: '700', color: colors.muted, width: 16 },
-  stepText: { fontSize: 15, color: colors.text },
-  stepNote: { fontSize: 13, color: colors.muted, marginTop: 2 },
-  about: { fontSize: 15, color: colors.text, lineHeight: 21 },
-  actions: { gap: 10, marginTop: 24 },
+  notFound: { paddingTop: space.xl },
+  roleSeg: { marginTop: space.xs },
+  stage: { marginTop: STAGE_MT },
+  count: { marginTop: COUNT_MT },
+  transport: { marginTop: TRANSPORT_MT },
+  chart: { marginTop: CHART_MT },
+  below: { marginTop: space.l, gap: space.l },
 });
