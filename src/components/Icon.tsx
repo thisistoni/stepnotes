@@ -13,6 +13,8 @@ import Svg, { G, Path } from 'react-native-svg';
 
 import { colors } from '@/lib/theme';
 
+import { HEEL_PARTS, SHOE_PARTS } from './FootShape';
+
 interface Part {
   d: string;
   /** solid shape instead of a stroke */
@@ -26,15 +28,16 @@ interface Part {
   dash?: string;
 }
 
-// Footprint outlines (same geometry as the diagram, see FootShape) — left foot, toes up.
-const FLAT_FOOT =
-  'M0.05,-1.3 C0.4,-1.3 0.52,-0.9 0.48,-0.5 C0.45,-0.1 0.34,0.2 0.3,0.35 L-0.32,0.35 ' +
-  'C-0.4,0.1 -0.5,-0.3 -0.48,-0.7 C-0.46,-1.1 -0.3,-1.3 0.05,-1.3 Z ' +
-  'M-0.3,0.5 L0.3,0.5 C0.34,0.8 0.32,1.15 0.1,1.26 C0,1.3 -0.1,1.3 -0.18,1.25 C-0.34,1.12 -0.34,0.8 -0.3,0.5 Z';
-const HEEL_FOOT =
-  'M0.05,-1.3 C0.45,-1.25 0.54,-0.7 0.45,-0.35 C0.39,-0.1 0.28,0.12 0.2,0.42 ' +
-  'C0.17,0.6 0.16,0.78 0.16,0.9 L0.17,1.12 C0.17,1.24 0.1,1.28 0.01,1.28 C-0.09,1.28 -0.16,1.24 -0.16,1.12 ' +
-  'L-0.15,0.9 C-0.15,0.78 -0.17,0.6 -0.2,0.42 C-0.28,0.14 -0.4,-0.05 -0.45,-0.35 C-0.54,-0.75 -0.36,-1.3 0.05,-1.3 Z';
+/**
+ * Footprint glyphs built from the diagram's own geometry (see FootShape): left foot, toes up.
+ * `foot(parts, transform)` draws the sole and the heel mark; the heel is nudged back by `gap`
+ * units so the cut stays at least ~1px wide at icon sizes (the diagram's gap is filled by the
+ * sticker outline instead).
+ */
+const foot = (parts: { sole: string; heel: string }, t: string, gap = 0.12): Part[] => [
+  { d: parts.sole, fill: true, t: `${t} translate(0 ${-gap / 2})` },
+  { d: parts.heel, fill: true, t: `${t} translate(0 ${gap / 2})` },
+];
 
 const ICONS = {
   back: [{ d: 'M15 5l-7 7 7 7' }],
@@ -121,11 +124,12 @@ const ICONS = {
     { d: 'M6.5 6h7A2.5 2.5 0 0 1 16 8.5v7a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 15.5v-7A2.5 2.5 0 0 1 6.5 6z' },
     { d: 'M16 10.5l4-2.5v8l-4-2.5z' },
   ],
-  'flat-shoe': [{ d: FLAT_FOOT, fill: true, t: 'translate(12 12) scale(7.2)' }],
-  heel: [{ d: HEEL_FOOT, fill: true, t: 'translate(12 12) scale(7.2)' }],
+  'flat-shoe': foot(SHOE_PARTS, 'translate(12 12) rotate(12) scale(6.9)', 0.18),
+  heel: foot(HEEL_PARTS, 'translate(12 12) rotate(12) scale(6.9)', 0.18),
+  // a left and a right shoe, walking
   footprints: [
-    { d: FLAT_FOOT, fill: true, t: 'translate(8.2 13) rotate(-8) scale(5.4)' },
-    { d: FLAT_FOOT, fill: true, t: 'translate(15.8 10.5) rotate(8) scale(-5.4 5.4)' },
+    ...foot(SHOE_PARTS, 'translate(8 13.2) rotate(-8) scale(5.2)', 0.2),
+    ...foot(SHOE_PARTS, 'translate(16 10.6) rotate(8) scale(-5.2 5.2)', 0.2),
   ],
 } satisfies Record<string, Part[]>;
 

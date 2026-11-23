@@ -12,27 +12,48 @@ export const SVG_FONT = fonts.display700;
 export const SVG_FONT_MEDIUM = fonts.display600;
 
 /**
- * Foot outlines drawn for a LEFT foot, centred on (0,0), toes pointing up (negative y).
- * Size: ~1 unit wide, 2.6 units long (y -1.3 … 1.3). Right feet are mirrored.
- * The flat shoe is two sub-paths (sole + heel) in ONE path so a sticker costs two <Path>s.
+ * Shoe-print outlines drawn for a LEFT foot, centred on (0,0), toes pointing up (negative y).
+ * The big-toe (inner) side is +x. Size: ~1 unit wide, 2.6 units long (y -1.3 … 1.3); right feet
+ * are the mirror image. Each print is a sole and a separate heel mark behind a gap, as two
+ * sub-paths of ONE path so a sticker still costs two <Path>s. The gap is narrower than the white
+ * sticker outline, so on a sticker it reads as a white cut, and dashed ghosts show both parts.
  */
-export const SHOE_PATH =
-  'M0.05,-1.3 C0.4,-1.3 0.52,-0.9 0.48,-0.5 C0.45,-0.1 0.34,0.2 0.3,0.35 L-0.32,0.35 ' +
-  'C-0.4,0.1 -0.5,-0.3 -0.48,-0.7 C-0.46,-1.1 -0.3,-1.3 0.05,-1.3 Z ' +
-  'M-0.3,0.5 L0.3,0.5 C0.34,0.8 0.32,1.15 0.1,1.26 C0,1.3 -0.1,1.3 -0.18,1.25 C-0.34,1.12 -0.34,0.8 -0.3,0.5 Z';
 
 /**
- * Heeled shoe as ONE outline: forefoot pad tapering through the shank into a block heel, so the
- * heel reads as part of the shoe instead of a detached dot.
+ * Flat (leader) shoe: rounded toe leaning to the big-toe side, a full outer edge, a straighter
+ * inner edge pinched in at the arch, a slanted cut, then a broad rounded heel block.
  */
-export const HEEL_PATH =
-  'M0.05,-1.3 C0.45,-1.25 0.54,-0.7 0.45,-0.35 ' +
-  'C0.39,-0.1 0.28,0.12 0.2,0.42 ' + // inner edge narrows into the shank
-  'C0.17,0.6 0.16,0.78 0.16,0.9 L0.17,1.12 ' + // shank flows into a block heel
-  'C0.17,1.24 0.1,1.28 0.01,1.28 C-0.09,1.28 -0.16,1.24 -0.16,1.12 ' +
-  'L-0.15,0.9 C-0.15,0.78 -0.17,0.6 -0.2,0.42 ' +
-  'C-0.28,0.14 -0.4,-0.05 -0.45,-0.35 ' +
-  'C-0.54,-0.75 -0.36,-1.3 0.05,-1.3 Z';
+export const SHOE_PARTS = {
+  // toe → inner ball → arch waist → slanted cut → outer edge → toe
+  sole:
+    'M0.1,-1.3 C0.38,-1.3 0.5,-1.04 0.5,-0.74 ' +
+    'C0.5,-0.44 0.36,-0.24 0.28,-0.04 C0.23,0.08 0.23,0.2 0.25,0.3 ' +
+    'L-0.38,0.4 C-0.45,0.12 -0.52,-0.22 -0.51,-0.6 ' +
+    'C-0.5,-1.04 -0.24,-1.3 0.1,-1.3 Z',
+  // heel block, top edge parallel to the cut
+  heel:
+    'M-0.37,0.55 L0.26,0.45 C0.33,0.74 0.34,1.04 0.2,1.2 ' +
+    'C0.1,1.31 -0.14,1.32 -0.26,1.2 C-0.38,1.07 -0.4,0.8 -0.37,0.55 Z',
+} as const;
+
+/**
+ * High heel (follower): an almond / leaf-shaped sole with a softly pointed toe on the big-toe
+ * side, widest at the ball, tapering into a narrow shank, then a small separate heel tip.
+ */
+export const HEEL_PARTS = {
+  // pointed toe → inner ball → straight inner edge into the shank → fuller outer edge → toe
+  sole:
+    'M0.24,-1.3 C0.3,-1.22 0.4,-1.08 0.45,-0.9 C0.49,-0.78 0.49,-0.7 0.47,-0.58 ' +
+    'C0.43,-0.24 0.18,0.22 0.06,0.62 ' +
+    'L-0.14,0.62 C-0.2,0.3 -0.43,0 -0.49,-0.4 ' +
+    'C-0.55,-0.78 -0.42,-1.08 -0.05,-1.25 C0.06,-1.29 0.16,-1.3 0.24,-1.3 Z',
+  // heel tip, set a little to the outer side under the heel bone; a touch wider than the shank
+  // so it survives the white outline at small sizes
+  heel: 'M-0.23,0.8 L0.15,0.8 C0.17,0.98 0.16,1.2 0.08,1.27 C0.02,1.31 -0.1,1.31 -0.16,1.27 C-0.24,1.2 -0.25,0.98 -0.23,0.8 Z',
+} as const;
+
+export const SHOE_PATH = `${SHOE_PARTS.sole} ${SHOE_PARTS.heel}`;
+export const HEEL_PATH = `${HEEL_PARTS.sole} ${HEEL_PARTS.heel}`;
 
 /** Box (in diagram units) that always contains a sticker footprint centred on (0,0) at any rotation. */
 export const FOOT_BOX = 3.3;
