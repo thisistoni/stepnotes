@@ -48,15 +48,23 @@ export function chartControlsHeight(withBars: boolean) {
   return withBars ? PICKER_H + GAP + LEGEND_H : LEGEND_H;
 }
 
+/**
+ * Whether the chart offers "All": every step of a long routine in one picture is a tangle of
+ * arrows nobody can read, so routines of more than three bars are shown one bar at a time.
+ */
+export const chartAllAllowed = (barCount: number) => barCount <= 3;
+
 /** Chart mode: "Bar 1 · Bar 2 · All" (only with more than one bar) and a one-line legend. */
 export const ChartControls = memo(function ChartControls({ bars, value, onChange, role }: Props) {
   const c = ROLE_COLOR[role];
   const narrow = useWindowDimensions().width < 360;
   const t = useT();
-  const options = [
-    ...bars.map((b, i) => ({ value: String(b.bar), label: bars.length > 4 ? `${i + 1}` : t.chart.bar(i + 1), accessibilityLabel: t.chart.bar(i + 1) })),
-    { value: 'all', label: t.chart.all, accessibilityLabel: t.chart.allA11y },
-  ];
+  const options: { value: string; label: string; icon?: 'chart'; accessibilityLabel: string }[] = bars.map((b, i) => ({
+    value: String(b.bar),
+    label: bars.length > 4 ? `${i + 1}` : t.chart.bar(i + 1),
+    accessibilityLabel: t.chart.bar(i + 1),
+  }));
+  if (chartAllAllowed(bars.length)) options.push({ value: 'all', label: t.chart.all, accessibilityLabel: t.chart.allA11y });
   return (
     <View style={s.wrap} testID="chart-controls">
       {bars.length > 1 && (

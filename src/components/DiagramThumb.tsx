@@ -77,8 +77,8 @@ function boxOf(spots: Spot[]) {
  *
  * Fitted tightly to the feet. Library tiles are wide and short, so a pattern that travels far
  * forward AND back (Salsa, Cha-Cha) would shrink to tiny feet; when showing only the first half of
- * the pattern makes the feet clearly bigger, the thumbnail shows that half (like a snapshot of the
- * first move) instead. Pure SVG (no measuring), memoised on the pattern.
+ * the pattern (or, for a long routine, its first third) makes the feet clearly bigger, the
+ * thumbnail shows that part (like a snapshot of the first move) instead. Pure SVG (no measuring), memoised on the pattern.
  */
 export const DiagramThumb = memo(function DiagramThumb({ pattern, tone, footStyle, aspect = 1.66, style }: DiagramThumbProps) {
   const { spots, viewBox } = useMemo(() => {
@@ -87,10 +87,18 @@ export const DiagramThumb = memo(function DiagramThumb({ pattern, tone, footStyl
     const total = totalBeats(pattern);
     if (pattern.steps.length >= 4 && total >= 4) {
       const starts = stepStartBeats(pattern);
-      const half = starts.filter((b) => b < total / 2 - 1e-6).length;
-      const firstHalf = spotsOf(pattern, half);
       const scaleOf = (b: { w: number; h: number }) => Math.min(aspect / b.w, 1 / b.h);
-      if (firstHalf.length > 2 && scaleOf(boxOf(firstHalf)) > 1.25 * scaleOf(boxOf(all))) chosen = firstHalf;
+      let best = 1.25 * scaleOf(boxOf(all));
+      // the first half, and for a long routine (several figures) also its first third: the
+      // opening figure, e.g. the waltz's box before it starts turning round the floor
+      for (const part of total >= 18 ? [2, 3] : [2]) {
+        const prefix = spotsOf(pattern, starts.filter((b) => b < total / part - 1e-6).length);
+        const sc = scaleOf(boxOf(prefix));
+        if (prefix.length > 2 && sc > best) {
+          best = sc;
+          chosen = prefix;
+        }
+      }
     }
     const b = boxOf(chosen);
     return { spots: chosen, viewBox: `${b.minX} ${b.minY} ${b.w} ${b.h}` };

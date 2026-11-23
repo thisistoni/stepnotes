@@ -14,7 +14,7 @@
  *   count · bar · beat         Zählzeit · Takt · Schlag;   bpm → BPM;  "&" → "und"
  *   forward · back · side      nach vorne · zurück (nach hinten) · zur Seite nach links/rechts
  *   diagonal · in place        schräg (schräg nach vorne links) · am Platz
- *   closes · turn              schließt zum rechten Fuß · dreht 90° nach rechts
+ *   closes · turn              schließt zum rechten Fuß · mit einer Vierteldrehung nach rechts (Drehung des Körpers)
  *   rock step · chassé · box   Wiegeschritt · Chassé · Karree;  rise and fall → heben / senken
  *   Animate / Chart            Animation / Übersicht
  *   Facing / Mirrored          Vorne (tag: arrow up = where you face; a11y "Blickrichtung") / Gespiegelt
@@ -67,7 +67,25 @@ function goesShort(s: Moving) {
   if (side && !fb) return `Zur Seite nach ${SIDE[side]}`;
   return `Schräg ${fb === 'forward' ? 'vorne' : 'hinten'} ${SIDE[side!]}`;
 }
-const turnBy = (turn: number) => `${Math.abs(turn)}° nach ${turn > 0 ? 'rechts' : 'links'}`;
+/** Turns the way a dance teacher says them; odd angles stay in degrees. [dative, bare] */
+const TURN: Record<number, [string, string]> = {
+  45: ['einer Achteldrehung', 'Achteldrehung'],
+  90: ['einer Vierteldrehung', 'Vierteldrehung'],
+  135: ['einer Dreiachteldrehung', 'Dreiachteldrehung'],
+  180: ['einer halben Drehung', 'halbe Drehung'],
+};
+/** ", mit einer Vierteldrehung nach links" */
+const withTurn = (turn: number) => {
+  if (!turn) return '';
+  const a = Math.abs(turn);
+  return `, mit ${TURN[a]?.[0] ?? `einer Drehung um ${a}°`} nach ${turn > 0 ? 'rechts' : 'links'}`;
+};
+/** ", Vierteldrehung links" */
+const withTurnShort = (turn: number) => {
+  if (!turn) return '';
+  const a = Math.abs(turn);
+  return `, ${TURN[a]?.[1] ?? `${a}°`} ${turn > 0 ? 'rechts' : 'links'}`;
+};
 
 function beats(b: number) {
   if (b === 0.5) return '½ Schlag';
@@ -474,14 +492,14 @@ export const de: Strings = {
   step: {
     describe: (s: StepInfo): string => {
       if (s.kind === 'hold') return 'Halten – Pause, kein Gewichtswechsel';
-      const turn = s.turn ? ` und dreht dabei ${turnBy(s.turn)}` : '';
+      const turn = withTurn(s.turn);
       if (s.kind === 'tap') {
         const where = s.motion === 'inPlace' ? 'am Platz' : s.motion === 'close' ? `neben dem ${ADJ[other(s.foot)]}` : at(s);
-        return `${FOOT[s.foot]} tippt ${where} auf${turn} – ohne Gewicht`;
+        return `${FOOT[s.foot]} tippt ${where} auf – ohne Gewicht${turn}`;
       }
       if (s.motion === 'inPlace') {
         return s.turn
-          ? `${FOOT[s.foot]} dreht am Platz ${turnBy(s.turn)} und übernimmt das Gewicht`
+          ? `${FOOT[s.foot]} übernimmt am Platz das Gewicht${turn}`
           : `Gewichtswechsel am Platz auf den ${ADJ[s.foot]} Fuß`;
       }
       if (s.motion === 'close') return `${FOOT[s.foot]} schließt zum ${ADJ[other(s.foot)]} Fuß${turn}`;
@@ -489,12 +507,12 @@ export const de: Strings = {
     },
     short: (s: StepInfo): string => {
       if (s.kind === 'hold') return 'Halten, kein Gewichtswechsel';
-      const turn = s.turn ? `, dreht ${turnBy(s.turn)}` : '';
+      const turn = withTurnShort(s.turn);
       if (s.kind === 'tap') {
         const where = s.motion === 'inPlace' ? 'am Platz ' : s.motion === 'close' ? '' : `${at(s)} `;
         return `Tippt ${where}auf${turn}`;
       }
-      if (s.motion === 'inPlace') return s.turn ? `Dreht am Platz ${turnBy(s.turn)}` : 'Gewichtswechsel am Platz';
+      if (s.motion === 'inPlace') return s.turn ? `Am Platz${turn}` : 'Gewichtswechsel am Platz';
       if (s.motion === 'close') return `Schließt${turn}`;
       return `${goesShort(s)}${turn}`;
     },
@@ -510,41 +528,137 @@ export const de: Strings = {
   styles: ['Salsa', 'Bachata', 'Standard', 'Latein'],
 
   starters: {
-    'builtin-salsa-basic': {
-      name: 'Salsa Grundschritt (On1)',
-      style: 'Salsa',
-      description:
-        'Der Grundschritt vor und zurück. Auf 1 geht’s in den Break: Wer führt, geht mit links nach vorne, wer folgt, mit rechts zurück. Auf 4 und 8 ist Pause.',
-      notes: {
-        leader: { 0: 'Break: das Gewicht ganz auf den linken Fuß', 3: 'Das Gewicht bleibt links', 4: 'Break nach hinten', 7: 'Das Gewicht bleibt rechts' },
-        follower: { 0: 'Break nach hinten: das Gewicht ganz auf den rechten Fuß', 3: 'Das Gewicht bleibt rechts', 4: 'Break nach vorne', 7: 'Das Gewicht bleibt links' },
-      },
-    },
-    'builtin-bachata-basic': {
-      name: 'Bachata Grundschritt seitwärts',
-      style: 'Bachata',
-      description: 'Drei Schritte zur Seite, auf 4 und 8 ein Tap – oft mit einer kleinen Hüftbewegung. Dann geht’s in die andere Richtung.',
-      notes: {
-        leader: { 3: 'Gern mit einer kleinen Hüftbewegung', 4: 'Richtungswechsel: jetzt nach rechts', 7: 'Gern mit einer kleinen Hüftbewegung' },
-        follower: { 3: 'Gern mit einer kleinen Hüftbewegung', 4: 'Richtungswechsel: jetzt nach links', 7: 'Gern mit einer kleinen Hüftbewegung' },
-      },
-    },
     'builtin-waltz-box': {
-      name: 'Langsamer Walzer – Karree',
+      name: 'Langsamer Walzer – Karree mit Linksdrehung',
       style: 'Standard',
-      description: 'Das klassische Karree: Vor – Seit – Schluss, Rück – Seit – Schluss. Auf 2 und 3 hebst du dich, am Ende von 3 senkst du dich wieder.',
+      description:
+        'Zwei Takte Karree (der Grundschritt), dann das Karree mit einer Vierteldrehung nach links in jedem Takt: Nach vier Takten schaust du wieder in die Ausgangsrichtung. Wer führt, beginnt mit links vorwärts, wer folgt, mit rechts rückwärts. Auf 2 und 3 hebst du dich, am Ende von 3 senkst du dich wieder.',
       notes: {
-        leader: { 0: 'Vorwärts, über die Ferse', 1: 'Seitschritt, dabei heben', 2: 'Schließen, am Ende senken', 3: 'Rückwärts, über den Ballen', 4: 'Seitschritt, dabei heben', 5: 'Schließen, am Ende senken' },
-        follower: { 0: 'Rückwärts, über den Ballen', 1: 'Seitschritt, dabei heben', 2: 'Schließen, am Ende senken', 3: 'Vorwärts, über die Ferse', 4: 'Seitschritt, dabei heben', 5: 'Schließen, am Ende senken' },
+        leader: {
+          0: 'Karree: vorwärts, über die Ferse',
+          1: 'Seitschritt, dabei heben',
+          2: 'Schließen, am Ende senken',
+          3: 'Rückwärts, über den Ballen',
+          4: 'Seitschritt, dabei heben',
+          5: 'Schließen, am Ende senken',
+          6: 'Linksdrehung im Karree: Fußspitze nach außen, Vierteldrehung nach links über 1–3',
+          7: 'Seitschritt: Die Vierteldrehung ist geschafft',
+          9: 'Rückwärts, Fußspitze nach innen: die nächste Vierteldrehung nach links',
+          11: 'Eine halbe Drehung ist geschafft',
+          12: 'Fußspitze nach außen: dritte Vierteldrehung',
+          15: 'Fußspitze nach innen: vierte Vierteldrehung',
+          17: 'Eine ganze Drehung: weiter mit dem Karree',
+        },
+        follower: {
+          0: 'Karree: rückwärts, über den Ballen',
+          1: 'Seitschritt, dabei heben',
+          2: 'Schließen, am Ende senken',
+          3: 'Vorwärts, über die Ferse',
+          4: 'Seitschritt, dabei heben',
+          5: 'Schließen, am Ende senken',
+          6: 'Linksdrehung im Karree: rückwärts, Fußspitze nach innen, Vierteldrehung nach links über 1–3',
+          7: 'Seitschritt: Die Vierteldrehung ist geschafft',
+          9: 'Vorwärts, Fußspitze nach außen: die nächste Vierteldrehung nach links',
+          11: 'Eine halbe Drehung ist geschafft',
+          12: 'Fußspitze nach innen: dritte Vierteldrehung',
+          15: 'Fußspitze nach außen: vierte Vierteldrehung',
+          17: 'Eine ganze Drehung: weiter mit dem Karree',
+        },
       },
     },
     'builtin-chacha-basic': {
-      name: 'Cha-Cha-Cha Grundschritt',
+      name: 'Cha-Cha-Cha – Grundschritt & New Yorker',
       style: 'Latein',
-      description: 'Auf 2 und 3 ein Wiegeschritt, dann das Chassé „4 und 1“ – das „Cha-Cha-Cha“ – zur Seite.',
+      description:
+        'Der Grundschritt: auf 2 und 3 ein Wiegeschritt, dann das Chassé „4 und 1“ – das „Cha-Cha-Cha“ – zur Seite. Danach der New Yorker zu beiden Seiten: Ihr dreht euch eine Vierteldrehung auseinander, macht den Wiegeschritt Seite an Seite und dreht euch zum Chassé wieder zueinander.',
       notes: {
-        leader: { 0: 'Wiegeschritt nach vorne', 1: 'Gewicht wieder auf rechts', 2: 'Chassé nach links: Cha-Cha-Cha', 5: 'Wiegeschritt zurück', 6: 'Gewicht wieder auf links', 7: 'Chassé nach rechts: Cha-Cha-Cha' },
-        follower: { 0: 'Wiegeschritt zurück', 1: 'Gewicht wieder auf links', 2: 'Chassé nach rechts: Cha-Cha-Cha', 5: 'Wiegeschritt nach vorne', 6: 'Gewicht wieder auf rechts', 7: 'Chassé nach links: Cha-Cha-Cha' },
+        leader: {
+          0: 'Grundschritt: Wiegeschritt nach vorne',
+          1: 'Gewicht zurück auf rechts',
+          2: 'Chassé nach links: Cha-Cha-Cha',
+          5: 'Wiegeschritt zurück',
+          6: 'Gewicht wieder auf links',
+          7: 'Chassé nach rechts: Cha-Cha-Cha',
+          10: 'New Yorker: auf dem rechten Fuß eine Vierteldrehung nach rechts, links vor – Seite an Seite',
+          11: 'Gewicht zurück auf rechts, wieder zueinander drehen',
+          12: 'Chassé nach links',
+          15: 'New Yorker zur anderen Seite: auf dem linken Fuß eine Vierteldrehung nach links, rechts vor',
+          16: 'Gewicht zurück auf links, wieder zueinander drehen',
+          17: 'Chassé nach rechts',
+        },
+        follower: {
+          0: 'Grundschritt: Wiegeschritt zurück',
+          1: 'Gewicht wieder auf links',
+          2: 'Chassé nach rechts: Cha-Cha-Cha',
+          5: 'Wiegeschritt nach vorne',
+          6: 'Gewicht zurück auf rechts',
+          7: 'Chassé nach links: Cha-Cha-Cha',
+          10: 'New Yorker: auf dem linken Fuß eine Vierteldrehung nach links, rechts vor – Seite an Seite',
+          11: 'Gewicht zurück auf links, wieder zueinander drehen',
+          12: 'Chassé nach rechts',
+          15: 'New Yorker zur anderen Seite: auf dem rechten Fuß eine Vierteldrehung nach rechts, links vor',
+          16: 'Gewicht zurück auf rechts, wieder zueinander drehen',
+          17: 'Chassé nach links',
+        },
+      },
+    },
+    'builtin-salsa-basic': {
+      name: 'Salsa On1 – Grundschritte & Rechtsdrehung',
+      style: 'Salsa',
+      description:
+        'Drei Figuren hintereinander: der Grundschritt vor und zurück, der Seitschritt und dann der Grundschritt, bei dem sich, wer folgt, auf 5-6-7 nach rechts dreht. Getanzt wird auf 1-2-3 und 5-6-7, auf 4 und 8 ist Pause.',
+      notes: {
+        leader: {
+          0: 'Grundschritt: Break nach vorne, das Gewicht ganz auf den linken Fuß',
+          3: 'Pause: Das Gewicht bleibt links',
+          4: 'Break nach hinten',
+          7: 'Pause: Das Gewicht bleibt rechts',
+          8: 'Seitschritt: links zur Seite',
+          9: 'Gewicht zurück auf rechts',
+          12: 'Rechts zur Seite',
+          16: 'Grundschritt – diesmal führst du eine Rechtsdrehung',
+          20: 'Auf 5-6-7 dreht sich, wer folgt, unter deiner erhobenen linken Hand nach rechts – du tanzt den Grundschritt',
+        },
+        follower: {
+          0: 'Grundschritt: Break nach hinten, das Gewicht ganz auf den rechten Fuß',
+          3: 'Pause: Das Gewicht bleibt rechts',
+          4: 'Break nach vorne',
+          7: 'Pause: Das Gewicht bleibt links',
+          8: 'Seitschritt: rechts zur Seite',
+          9: 'Gewicht zurück auf links',
+          12: 'Links zur Seite',
+          16: 'Grundschritt',
+          20: 'Rechtsdrehung: bis hierher wie im Grundschritt',
+          21: 'Eine halbe Drehung nach rechts, während der rechte Fuß das Gewicht übernimmt',
+          22: 'Die zweite halbe Drehung, der linke Fuß schließt: Du schaust wieder nach vorne',
+        },
+      },
+    },
+    'builtin-bachata-basic': {
+      name: 'Bachata – Grundschritt & Linksdrehung',
+      style: 'Bachata',
+      description:
+        'Der seitliche Grundschritt: drei Schritte zur Seite, auf 4 und 8 ein Tap ohne Gewicht, dann in die andere Richtung. Beim zweiten Mal dreht sich, wer folgt, auf 5-6-7 einmal ganz nach links und wandert dabei mit dem Grundschritt mit.',
+      notes: {
+        leader: {
+          0: 'Grundschritt seitlich: links zur Seite',
+          3: 'Tap ohne Gewicht, gern mit einer kleinen Hüftbewegung',
+          4: 'Richtungswechsel: jetzt nach rechts',
+          7: 'Tap ohne Gewicht',
+          8: 'Grundschritt: Auf 1-4 bereitest du die Drehung vor',
+          12: 'Auf 5-6-7 führst du die Linksdrehung – du selbst tanzt den Grundschritt',
+        },
+        follower: {
+          0: 'Grundschritt seitlich: rechts zur Seite',
+          3: 'Tap ohne Gewicht, gern mit einer kleinen Hüftbewegung',
+          4: 'Richtungswechsel: jetzt nach links',
+          7: 'Tap ohne Gewicht',
+          8: 'Grundschritt',
+          12: 'Linksdrehung: auf dem rechten Fuß eine Vierteldrehung nach links, links weiter',
+          13: 'Eine halbe Drehung weiter nach links, der rechte Fuß folgt',
+          14: 'Die letzte Vierteldrehung: Du schaust wieder nach vorne',
+          15: 'Tap ohne Gewicht',
+        },
       },
     },
   },

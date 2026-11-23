@@ -7,7 +7,7 @@
  *
  * Rules: unknown keys are dropped; strings are trimmed and length-capped; numbers must be finite
  * (numeric strings are accepted) and are clamped into sane ranges (bpm 20–300, beats/bar 1–12,
- * positions ±50); a step's length must be > 0; `videoUrl` is kept only if it is http(s);
+ * positions ±50, a step's optional `pivot` ±720°, dropped when it is not a number); a step's length must be > 0; `videoUrl` is kept only if it is http(s);
  * missing or duplicate step ids are generated. Anything that cannot be repaired throws a
  * `DanceValidationError`; show `err.localized(t)` to the user (`message` is English, for logs).
  */
@@ -64,6 +64,7 @@ export const LIMITS = {
   url: 2000,
   steps: 500,
   coord: 50,
+  pivot: 720,
   bpm: [20, 300],
   beatsPerBar: [1, 12],
   stepBeats: [0.125, 32],
@@ -112,6 +113,17 @@ function footPos(v: unknown, where: ValidationWhere, field: string): FootPos {
     y: clamp(num(v.y, where, `${field}.y`), -c, c),
     rot: normRot(num(v.rot, where, `${field}.rot`, 0)),
   };
+}
+
+/**
+ * Optional swivel of the weight-bearing foot (degrees, may exceed 180). Lenient: anything that is
+ * not a finite number is dropped instead of rejecting the dance; clamped to two full turns.
+ */
+function pivotOf(v: unknown): number | undefined {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return undefined;
+  const r = Math.round(clamp(n, -LIMITS.pivot, LIMITS.pivot) * 10) / 10;
+  return r === 0 ? undefined : r;
 }
 
 function foot(v: unknown, where: ValidationWhere): Foot {
@@ -165,6 +177,8 @@ function pattern(v: unknown, role: Role): Pattern {
       to,
     };
     if (note) step.note = note;
+    const pivot = pivotOf(raw.pivot);
+    if (pivot && kind !== 'hold') step.pivot = pivot;
     return step;
   });
   return { start, steps };

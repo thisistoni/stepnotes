@@ -22,6 +22,8 @@ export interface CountLine {
   role: Role;
   step: Step | null;
   text: string;
+  /** Both view: the step's turn in degrees (+ = right), shown as a chip after the text; 0 = none */
+  turn?: number;
 }
 
 interface Props {
@@ -145,6 +147,9 @@ export const CountBlock = memo(function CountBlock({ role, steps, bars, index, l
   const t = useT();
   const overline = n === 0 ? t.count.noSteps : step ? t.count.stepOf(index + 1, n) : t.count.readyOf(n);
   const both = lines.length > 1;
+  // a turning step's description ("… and turns 90° to the left") needs a third, smaller line
+  // rather than losing its end to an ellipsis; the block keeps its height
+  const long = (lines[0]?.text.length ?? 0) > (compact ? 42 : 48);
   return (
     <View style={{ height: countBlockHeight(compact) }} testID="count-block">
       <View style={s.row}>
@@ -166,11 +171,24 @@ export const CountBlock = memo(function CountBlock({ role, steps, bars, index, l
                   <Text variant="smallStrong" numberOfLines={1} style={s.lineText}>
                     {l.text}
                   </Text>
+                  {l.turn ? (
+                    <View style={s.turn} testID={`turn-chip-${l.role}`}>
+                      <Icon name={l.turn > 0 ? 'rotate-right' : 'rotate-left'} size={13} color={ROLE_COLOR[l.role].deep} strokeWidth={2.6} />
+                      <Text variant="caption" color={ROLE_COLOR[l.role].deep} style={s.turnText}>
+                        {`${Math.abs(l.turn)}°`}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               ))}
             </View>
           ) : (
-            <Text variant="cardTitle" numberOfLines={2} style={[s.desc, compact && s.descCompact]} testID="count-description">
+            <Text
+              variant="cardTitle"
+              numberOfLines={long ? 3 : 2}
+              style={[s.desc, compact && s.descCompact, long && (compact ? s.descLongCompact : s.descLong)]}
+              testID="count-description"
+            >
               {lines[0]?.text ?? ''}
             </Text>
           )}
@@ -206,8 +224,12 @@ const s = StyleSheet.create({
   text: { flex: 1, minWidth: 0 },
   desc: { marginTop: 2, height: typography.cardTitle.lineHeight * 2 },
   descCompact: { fontSize: 16, lineHeight: 20, height: 40 },
+  descLong: { fontSize: 15.5, lineHeight: 18, height: 54 },
+  descLongCompact: { fontSize: 13.5, lineHeight: 16, height: 48 },
   lines: { marginTop: 6, gap: 6, height: 2 * 22 + 6 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   lineText: { flex: 1 },
+  turn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  turnText: { fontSize: 12, lineHeight: 14 },
 });
 

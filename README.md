@@ -13,11 +13,11 @@ A mobile app (iOS and Android, built with Expo / React Native) for **learning an
 ## What it does
 
 - **Intro** (first launch): three short steps. Welcome, which part you dance (leader, follower or both), and a one-minute interactive lesson on reading the footprints. The lesson can be opened again from the library.
-- **Library**: four starter dances (Salsa On1 basic, Bachata side basic, Waltz box, Cha-cha basic) and your own dances, with search and style filters.
+- **Library**: four starter routines of beginner figures (Slow Waltz: box and left box turn; Cha-cha: basic and New Yorker; Salsa On1: basic, side basic and the follower's right turn; Bachata: side basic and the follower's inside turn) and your own dances, with search and style filters.
 - **Player**
   - *Animate*: the feet glide on the beat. The foot carrying your weight is solid, the free foot is light, and the moving foot has a thick numbered arrow and a dashed outline where it will land. Taps, holds and turns each look different from a normal step.
   - Big count, a plain-language description ("Right foot steps back"), beat pills to jump to any step, and previous / next to walk through one step at a time.
-  - *Chart*: the printed view with every position numbered, one chart per bar or all at once.
+  - *Chart*: the printed view with every position numbered, one chart per bar (short dances of up to three bars can also show all steps at once).
   - Leader, Follower or **Both** side by side, in sync.
   - Tempo 50–125 %, loop, spoken counts, mirror mode, L / R letters, and vibration on each step (phones only).
   - Duplicate, share as text, delete (with undo).
@@ -80,10 +80,10 @@ To add a language: add its code to `LANGUAGES` in `languages.ts`, write `xx.ts` 
 
 ## Data model
 
-A `Dance` has a name, style, tempo (bpm), beats per bar, a `leader` pattern and an optional `follower` pattern. A pattern is a **start position** for both feet plus a list of **steps**. Each step has a count label (`"1"`, `"&"`, …), a length in beats, which foot moves, an action (`step` takes the weight, `tap` touches without weight, `hold` pauses) and where the foot ends up (`x`, `y`, `rot`). The dancer faces up the screen and one unit is about one foot width. Weight, animation, charts and descriptions are all calculated from this.
+A `Dance` has a name, style, tempo (bpm), beats per bar, a `leader` pattern and an optional `follower` pattern. A pattern is a **start position** for both feet plus a list of **steps**. Each step has a count label (`"1"`, `"&"`, …), a length in beats, which foot moves, an action (`step` takes the weight, `tap` touches without weight, `hold` pauses), where the foot ends up (`x`, `y`, `rot`) and optionally a `pivot`: how far the weight-bearing foot swivels on the spot meanwhile (spins, turns). The dancer faces up the screen at the start (after a turn, "forward" in the descriptions and the facing arrow follow the dancer) and one unit is about one foot width. Weight, animation, charts and descriptions are all calculated from this.
 
 Shared dances are this same structure as JSON text.
 
-> The starter dances are simplified textbook basics. Ask a dance teacher to check them.
+> The starter routines were researched figure by figure; the sources and the points a dance teacher should double-check are listed next to each dance in `src/lib/builtins.ts`.
 
 See [`docs/PRODUCT_IDEAS.md`](docs/PRODUCT_IDEAS.md) for who the app is for, questions for a dancer, and the roadmap.
