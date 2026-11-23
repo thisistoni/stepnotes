@@ -1,9 +1,10 @@
-import { Redirect, Stack, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View, Pressable } from 'react-native';
 
 import { patternBounds, StepDiagram, type Bounds } from '@/components/StepDiagram';
-import { Button, Card, Segmented, SectionTitle } from '@/components/ui';
+import { Button, Card, Segmented, SectionTitle } from '@/components/legacyUi';
+import { Header, Screen } from '@/components/ui';
 import { computeStates, describeStep, nextCount, otherFoot, toPartner, uid } from '@/lib/pattern';
 import { newDance, useDances } from '@/lib/store';
 import { DEFAULT_FOOT_STYLE, ROLE_THEME, colors } from '@/lib/theme';
@@ -30,17 +31,16 @@ export default function EditorRoute() {
 
   // Wait for the store: initialising the draft before it has loaded showed an empty form and
   // "Save" then created a new dance.
-  if (!ready) return <Stack.Screen options={{ title: '' }} />;
+  if (!ready) return <Screen header={<Header />} />;
   // Starter dances are read-only: the player offers "Make my own version".
   if (!isNew && isBuiltIn(id)) return <Redirect href={`/dance/${id}`} />;
   const existing = isNew ? undefined : get(id);
   if (!isNew && !existing) {
     return (
-      <View style={{ padding: 24, gap: 12 }}>
-        <Stack.Screen options={{ title: 'Not found' }} />
+      <Screen header={<Header title="Not found" />} contentStyle={{ gap: 12 }}>
         <Text>This dance does not exist anymore.</Text>
         <Button label="Go to library" onPress={() => router.replace('/')} />
-      </View>
+      </Screen>
     );
   }
   // key: a different dance id gets a fresh editor state
@@ -207,13 +207,18 @@ function Editor({ initial }: { initial?: Dance }) {
         : `Tap or drag on the grid to place the ${selected?.foot === 'L' ? 'left' : 'right'} foot for count “${selected?.count}”.`;
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          title: isNew ? 'New dance' : 'Edit dance',
-          headerRight: () => <Button small variant="primary" label="Save" onPress={onSave} />,
-        }}
-      />
+    <Screen
+      scroll={false}
+      padded={false}
+      header={
+        <Header
+          title={isNew ? 'New dance' : 'Edit dance'}
+          leading="close"
+          sideWidth={72}
+          right={<Button small variant="primary" label="Save" onPress={onSave} />}
+        />
+      }
+    >
       <ScrollView contentContainerStyle={s.content} scrollEnabled={scrollEnabled} keyboardShouldPersistTaps="handled">
         <Card>
           <Field label="Name" value={draft.name} onChange={(name) => update({ name })} placeholder="e.g. Salsa Cross Body Lead" />
@@ -408,7 +413,7 @@ function Editor({ initial }: { initial?: Dance }) {
           </>
         )}
       </ScrollView>
-    </>
+    </Screen>
   );
 }
 
@@ -445,7 +450,7 @@ function StepChip({
         active && { backgroundColor: color, borderColor: color },
       ]}
     >
-      <Text style={[s.chipText, active && { color: '#fff' }, dashed && { color }]}>{label}</Text>
+      <Text style={[s.chipText, active && { color: colors.onColor }, dashed && { color }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -475,7 +480,7 @@ function Field({
         onChangeText={onChange}
         onBlur={onBlur}
         placeholder={placeholder}
-        placeholderTextColor="#A8A29E"
+        placeholderTextColor={colors.ink3}
         multiline={multiline}
         keyboardType={keyboardType}
         autoCapitalize={keyboardType === 'url' ? 'none' : 'sentences'}
@@ -497,7 +502,7 @@ const s = StyleSheet.create({
     paddingVertical: 9,
     fontSize: 15,
     color: colors.text,
-    backgroundColor: '#FBFAF8',
+    backgroundColor: colors.card,
   },
   hint: { fontSize: 13, color: colors.muted, lineHeight: 18 },
   desc: { fontSize: 15, fontWeight: '600', color: colors.text },

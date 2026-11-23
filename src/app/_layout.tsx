@@ -1,11 +1,15 @@
+import { Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
+import { Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold, Nunito_900Black } from '@expo-google-fonts/nunito';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, router, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, type ReactNode } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ErrorScreen } from '@/components/ErrorScreen';
+import { ConfirmHost, ToastHost } from '@/components/ui';
 import { PrefsProvider, usePrefs } from '@/lib/prefs';
 import { DanceProvider, useDances } from '@/lib/store';
 import { colors } from '@/lib/theme';
@@ -13,8 +17,19 @@ import { colors } from '@/lib/theme';
 // Keep the native splash screen up until stored dances, prefs and fonts are loaded (no-op on web).
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-/** Fonts to load at startup: `{ FamilyName: require('../../assets/fonts/x.ttf') }`. None chosen yet. */
-const FONTS = {};
+/**
+ * Fonts: each weight is its own family (names in `fonts` in '@/lib/theme'); the <Text> kit
+ * component picks them, nobody sets fontFamily by hand.
+ */
+const FONTS = {
+  Fredoka_500Medium,
+  Fredoka_600SemiBold,
+  Fredoka_700Bold,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  Nunito_800ExtraBold,
+  Nunito_900Black,
+};
 
 /** Never keep the splash screen longer than this, even if storage hangs. */
 const SPLASH_TIMEOUT_MS = 3000;
@@ -25,29 +40,52 @@ export { ErrorScreen as ErrorBoundary };
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(FONTS);
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={s.root}>
       <PrefsProvider>
         <DanceProvider>
-          <SplashGate fontsReady={fontsLoaded || !!fontError}>
-            <StatusBar style="dark" />
-            <Stack
-              unstable_screenErrorBoundary={ErrorScreen}
-              screenOptions={{
-                headerStyle: { backgroundColor: colors.bg },
-                headerShadowVisible: false,
-                headerTintColor: colors.text,
-                contentStyle: { backgroundColor: colors.bg },
-              }}
-            >
-              <Stack.Screen name="index" options={{ title: 'StepNotes' }} />
-              <Stack.Screen name="dance/[id]" options={{ title: '' }} />
-              <Stack.Screen name="edit/[id]" options={{ title: 'Edit dance' }} />
-              <Stack.Screen name="import" options={{ title: 'Import dance', presentation: 'modal' }} />
-            </Stack>
-          </SplashGate>
+          <ToastHost>
+            <ConfirmHost>
+              <StatusBar style="dark" />
+              <AppStack fontsReady={fontsLoaded || !!fontError} />
+            </ConfirmHost>
+          </ToastHost>
         </DanceProvider>
       </PrefsProvider>
     </GestureHandlerRootView>
+  );
+}
+
+function AppStack({ fontsReady }: { fontsReady: boolean }) {
+  const { ready: prefsReady, prefs } = usePrefs();
+  const pathname = usePathname();
+  const gated = fontsReady && prefsReady && !prefs.onboardingDone && pathname !== '/intro';
+  // Stack.Protected sends blocked routes to the first available screen; make the target explicit
+  // so a future unprotected route can never become the landing page.
+  useEffect(() => {
+    if (gated) router.replace('/intro');
+  }, [gated]);
+  return (
+    <SplashGate fontsReady={fontsReady}>
+      {/* Nothing renders until fonts + prefs are known: no fallback-font flash, no intro flash. */}
+      {fontsReady && prefsReady ? (
+        <Stack
+          unstable_screenErrorBoundary={ErrorScreen}
+          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
+        >
+          {/* First-run intro, and the "How to read the footprints" lesson (`/intro?lesson=1`). */}
+          <Stack.Screen name="intro" options={{ animation: 'fade' }} />
+          {/* Until the intro is done every other route redirects to it. */}
+          <Stack.Protected guard={prefs.onboardingDone}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="dance/[id]" />
+            <Stack.Screen name="edit/[id]" />
+            <Stack.Screen name="import" options={{ presentation: 'modal' }} />
+          </Stack.Protected>
+        </Stack>
+      ) : (
+        <View style={s.root} />
+      )}
+    </SplashGate>
   );
 }
 
@@ -61,3 +99,7 @@ function SplashGate({ fontsReady, children }: { fontsReady: boolean; children: R
   }, [ready]);
   return children;
 }
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+});

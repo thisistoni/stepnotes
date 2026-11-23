@@ -1,12 +1,13 @@
 import * as Haptics from 'expo-haptics';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 
 import { StepDiagram } from '@/components/StepDiagram';
-import { Button, Card, Segmented, SectionTitle, Toggle } from '@/components/ui';
+import { Button, Card, Segmented, SectionTitle, Toggle } from '@/components/legacyUi';
+import { Header, IconButton, Screen } from '@/components/ui';
 import { computeStates, describeStep, mirrorPattern, stepStartBeats, totalBeats } from '@/lib/pattern';
 import { usePrefs } from '@/lib/prefs';
 import { exportJson, useDances } from '@/lib/store';
@@ -24,15 +25,14 @@ export default function DancePlayerRoute() {
   const dance = get(id);
 
   if (!ready || !prefsReady) {
-    return <Stack.Screen options={{ title: '' }} />;
+    return <Screen header={<Header />} />;
   }
   if (!dance) {
     return (
-      <View style={{ padding: 24, gap: 12 }}>
-        <Stack.Screen options={{ title: 'Not found' }} />
+      <Screen header={<Header title="Not found" />} contentStyle={{ gap: 12 }}>
         <Text>This dance does not exist anymore.</Text>
         <Button label="Go to library" onPress={() => router.replace('/')} />
-      </View>
+      </Screen>
     );
   }
   return <DancePlayer dance={dance} />;
@@ -125,14 +125,14 @@ function DancePlayer({ dance }: { dance: Dance }) {
     : [{ value: 'leader', label: 'Steps' }];
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          title: dance.name || 'Untitled dance',
-          headerRight: dance.builtIn
-            ? undefined
-            : () => <Button small variant="ghost" label="Edit" onPress={() => router.push(`/edit/${dance.id}`)} />,
-        }}
+    <Screen scroll={false} padded={false}>
+      <Header
+        title={dance.name || 'Untitled dance'}
+        right={
+          dance.builtIn ? undefined : (
+            <IconButton icon="pencil" label="Edit dance" onPress={() => router.push(`/edit/${dance.id}`)} />
+          )
+        }
       />
       <ScrollView contentContainerStyle={s.content}>
         {roleOptions.length > 1 && (
@@ -262,7 +262,7 @@ function DancePlayer({ dance }: { dance: Dance }) {
           {!dance.builtIn && <Button label="Delete" variant="danger" onPress={onDelete} />}
         </View>
       </ScrollView>
-    </>
+    </Screen>
   );
 }
 

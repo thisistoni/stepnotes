@@ -1,26 +1,31 @@
 import { memo } from 'react';
-import { Platform } from 'react-native';
 import { G, Path, Text as SvgText } from 'react-native-svg';
 
+import { fonts } from '@/lib/theme';
 import type { Foot, FootPos, FootStyle } from '@/lib/types';
 
-export const SVG_FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' : undefined;
+/**
+ * Display font for SVG text (L/R letters, counts). expo-font registers the family under this
+ * name on web and native, so the same string works everywhere. Never add a fontWeight to it.
+ */
+export const SVG_FONT = fonts.display700;
+export const SVG_FONT_MEDIUM = fonts.display600;
 
 /**
  * Foot outlines drawn for a LEFT foot, centred on (0,0), toes pointing up (negative y).
  * Size: ~1 unit wide, 2.6 units long (y -1.3 … 1.3). Right feet are mirrored.
+ * The flat shoe is two sub-paths (sole + heel) in ONE path so a sticker costs two <Path>s.
  */
-const SHOE_SOLE =
+export const SHOE_PATH =
   'M0.05,-1.3 C0.4,-1.3 0.52,-0.9 0.48,-0.5 C0.45,-0.1 0.34,0.2 0.3,0.35 L-0.32,0.35 ' +
-  'C-0.4,0.1 -0.5,-0.3 -0.48,-0.7 C-0.46,-1.1 -0.3,-1.3 0.05,-1.3 Z';
-const SHOE_HEEL =
+  'C-0.4,0.1 -0.5,-0.3 -0.48,-0.7 C-0.46,-1.1 -0.3,-1.3 0.05,-1.3 Z ' +
   'M-0.3,0.5 L0.3,0.5 C0.34,0.8 0.32,1.15 0.1,1.26 C0,1.3 -0.1,1.3 -0.18,1.25 C-0.34,1.12 -0.34,0.8 -0.3,0.5 Z';
 
 /**
  * Heeled shoe as ONE outline: forefoot pad tapering through the shank into a block heel, so the
  * heel reads as part of the shoe instead of a detached dot.
  */
-const HEEL_SHOE =
+export const HEEL_PATH =
   'M0.05,-1.3 C0.45,-1.25 0.54,-0.7 0.45,-0.35 ' +
   'C0.39,-0.1 0.28,0.12 0.2,0.42 ' + // inner edge narrows into the shank
   'C0.17,0.6 0.16,0.78 0.16,0.9 L0.17,1.12 ' + // shank flows into a block heel
@@ -29,14 +34,26 @@ const HEEL_SHOE =
   'C-0.28,0.14 -0.4,-0.05 -0.45,-0.35 ' +
   'C-0.54,-0.75 -0.36,-1.3 0.05,-1.3 Z';
 
-/** Box (in diagram units) that always contains a footprint centred on (0,0) at any rotation. */
-export const FOOT_BOX = 2.8;
+/** Box (in diagram units) that always contains a sticker footprint centred on (0,0) at any rotation. */
+export const FOOT_BOX = 3.3;
+
+/** Sticker geometry (diagram units). */
+export const STICKER = {
+  /** White outline width */
+  outline: 0.16,
+  /** Lip offset (straight down on screen) */
+  lip: 0.1,
+  /** Dashed ghost outline */
+  ghostWidth: 0.07,
+  ghostDash: '0.17 0.12',
+} as const;
 
 interface Props {
   foot: Foot;
   /** Defaults to the origin, upright (the animated layer positions feet with view transforms). */
   pos?: FootPos;
   style: FootStyle;
+  /** Fill (solid foot) or dashed stroke (outline foot) */
   color: string;
   /** Colour of the L / R letter; pick one that contrasts with `color`. */
   letterColor?: string;
@@ -44,10 +61,24 @@ interface Props {
   showLetter?: boolean;
   /** Dashed outline instead of fill (used for ghost positions and taps) */
   outline?: boolean;
+  /** Sticker lip colour under a solid foot (omit for a flat foot) */
+  lip?: string;
+  /** Sticker outline colour around a solid foot (omit for none) */
+  stroke?: string;
+  /** Outline width (default STICKER.outline) */
+  strokeWidth?: number;
+  /** Fill inside a dashed outline */
+  ghostFill?: string;
+  /** Dashed outline width (default STICKER.ghostWidth) */
+  ghostWidth?: number;
 }
 
 const ORIGIN: FootPos = { x: 0, y: 0, rot: 0 };
 
+/**
+ * One footprint. Solid feet are stickers: an offset darker lip, the coloured face and a white
+ * outline (2 paths). Outline feet are a single dashed path. Cheap enough for thumbnails.
+ */
 export const FootShape = memo(function FootShape({
   foot,
   pos = ORIGIN,
@@ -57,29 +88,52 @@ export const FootShape = memo(function FootShape({
   opacity = 1,
   showLetter,
   outline,
+  lip,
+  stroke,
+  strokeWidth = STICKER.outline,
+  ghostFill,
+  ghostWidth = STICKER.ghostWidth,
 }: Props) {
   const flip = foot === 'R' ? -1 : 1;
-  const fillProps = outline
-    ? { fill: 'none', stroke: color, strokeWidth: 0.06, strokeDasharray: '0.15 0.12' }
-    : { fill: color };
+  const d = style === 'shoe' ? SHOE_PATH : HEEL_PATH;
+  const place = `translate(${pos.x} ${pos.y}) rotate(${pos.rot})`;
 
+  if (outline) {
+    return (
+      <G transform={place} opacity={opacity}>
+        <G transform={`scale(${flip} 1)`}>
+          <Path
+            d={d}
+            fill={ghostFill ?? 'none'}
+            stroke={color}
+            strokeWidth={ghostWidth}
+            strokeDasharray={STICKER.ghostDash}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </G>
+      </G>
+    );
+  }
+
+  const sw = stroke || lip ? strokeWidth : 0;
   return (
-    <G transform={`translate(${pos.x} ${pos.y}) rotate(${pos.rot})`} opacity={opacity}>
-      <G transform={`scale(${flip} 1)`}>
-        {style === 'shoe' ? (
-          <>
-            <Path d={SHOE_SOLE} {...fillProps} />
-            <Path d={SHOE_HEEL} {...fillProps} />
-          </>
-        ) : (
-          <Path d={HEEL_SHOE} {...fillProps} strokeLinejoin="round" />
+    <G opacity={opacity}>
+      {lip && (
+        <G transform={`translate(${pos.x} ${pos.y + STICKER.lip}) rotate(${pos.rot}) scale(${flip} 1)`}>
+          <Path d={d} fill={lip} stroke={lip} strokeWidth={sw} strokeLinejoin="round" />
+        </G>
+      )}
+      <G transform={place}>
+        <G transform={`scale(${flip} 1)`}>
+          <Path d={d} fill={color} stroke={stroke ?? 'none'} strokeWidth={sw} strokeLinejoin="round" />
+        </G>
+        {showLetter && letterColor && (
+          <SvgText x={0} y={-0.26} fontSize={0.62} fontFamily={SVG_FONT} fill={letterColor} textAnchor="middle">
+            {foot}
+          </SvgText>
         )}
       </G>
-      {showLetter && !outline && letterColor && (
-        <SvgText x={0} y={-0.3} fontSize={0.62} fontWeight="700" fontFamily={SVG_FONT} fill={letterColor} textAnchor="middle">
-          {foot}
-        </SvgText>
-      )}
     </G>
   );
 });

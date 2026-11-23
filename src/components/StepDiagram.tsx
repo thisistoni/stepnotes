@@ -18,7 +18,7 @@
 import { memo, useDeferredValue, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedReaction, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import Svg, { G, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { growTo, layoutChart, LABEL_SIZE, type Bounds, type ChartArrow, type ChartLayout, type Vec } from '@/lib/chartLayout';
@@ -260,7 +260,11 @@ const StaticLayer = memo(function StaticLayer({
               foot={p.foot}
               pos={p.pos}
               style={footStyle}
-              color={p.isStart ? theme.solid : theme.light}
+              color={p.isTap ? theme.activeArrow : p.isStart ? theme.solid : theme.light}
+              lip={p.isStart ? theme.solidLip : theme.lightLip}
+              stroke={theme.outline}
+              ghostFill={theme.ghostFill}
+              ghostWidth={0.09}
               letterColor={p.isStart ? theme.letterOnSolid : theme.letterOnLight}
               outline={p.isTap}
               showLetter={showLetters}
@@ -273,7 +277,15 @@ const StaticLayer = memo(function StaticLayer({
       ) : (
         <G>
           {layout.feet.map((p, i) => (
-            <FootShape key={`g${i}`} foot={p.foot} pos={p.pos} style={footStyle} color={theme.ghost} outline />
+            <FootShape
+              key={`g${i}`}
+              foot={p.foot}
+              pos={p.pos}
+              style={footStyle}
+              color={theme.ghost}
+              ghostFill={theme.ghostFill}
+              outline
+            />
           ))}
         </G>
       )}
@@ -311,7 +323,7 @@ const LiveArrow = memo(function LiveArrow({
   if (!current) return null;
   return (
     <Svg width="100%" height="100%" viewBox={viewBox} style={StyleSheet.absoluteFill}>
-      <ArrowGlyph arrow={current} color={theme.activeArrow} labelColor={theme.label} strong showLabel={showLabel} />
+      <ArrowGlyph arrow={current} color={theme.activeArrow} labelColor={theme.label} theme={theme} strong showLabel={showLabel} />
     </Svg>
   );
 });
@@ -367,9 +379,25 @@ const AnimatedFoot = memo(function AnimatedFoot({
       testID={`diagram-foot-${foot}`}
       style={[{ position: 'absolute', left: 0, top: 0, width: box, height: box }, moveStyle]}
     >
-      <FootSvg foot={foot} style={footStyle} color={theme.light} letterColor={theme.letterOnLight} showLetter={showLetters} />
+      <FootSvg
+        foot={foot}
+        style={footStyle}
+        color={theme.light}
+        lip={theme.lightLip}
+        stroke={theme.outline}
+        letterColor={theme.letterOnLight}
+        showLetter={showLetters}
+      />
       <Animated.View style={[StyleSheet.absoluteFill, solidStyle]}>
-        <FootSvg foot={foot} style={footStyle} color={theme.solid} letterColor={theme.letterOnSolid} showLetter={showLetters} />
+        <FootSvg
+          foot={foot}
+          style={footStyle}
+          color={theme.solid}
+          lip={theme.solidLip}
+          stroke={theme.outline}
+          letterColor={theme.letterOnSolid}
+          showLetter={showLetters}
+        />
       </Animated.View>
     </Animated.View>
   );
@@ -381,6 +409,8 @@ const FootSvg = memo(function FootSvg(props: {
   foot: Foot;
   style: FootStyle;
   color: string;
+  lip: string;
+  stroke: string;
   letterColor: string;
   showLetter: boolean;
 }) {
@@ -414,7 +444,7 @@ const StaticPose = memo(function StaticPose({
   return (
     <Svg width="100%" height="100%" viewBox={viewBox} style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       {current && (
-        <ArrowGlyph arrow={current} color={theme.activeArrow} labelColor={theme.label} strong showLabel={showLabel} />
+        <ArrowGlyph arrow={current} color={theme.activeArrow} labelColor={theme.label} theme={theme} strong showLabel={showLabel} />
       )}
       {(['L', 'R'] as Foot[]).map((f) => {
         const solid = frame.weight === null || frame.weight === f;
@@ -425,6 +455,8 @@ const StaticPose = memo(function StaticPose({
             pos={frame.feet[f]}
             style={footStyle}
             color={solid ? theme.solid : theme.light}
+            lip={solid ? theme.solidLip : theme.lightLip}
+            stroke={theme.outline}
             letterColor={solid ? theme.letterOnSolid : theme.letterOnLight}
             showLetter={showLetters}
           />
@@ -447,19 +479,22 @@ function ArrowGlyph({
   arrow,
   color,
   labelColor,
+  theme,
   strong,
   showLabel,
 }: {
   arrow: ChartArrow;
   color: string;
   labelColor: string;
+  /** strong arrows draw their number in a round badge in the role colour */
+  theme?: RoleTheme;
   strong?: boolean;
   showLabel: boolean;
 }) {
   const { a, b } = arrow;
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
   const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
-  const sw = strong ? 0.13 : 0.085;
+  const sw = strong ? 0.15 : 0.09;
   const dash = arrow.dashed ? '0.25 0.18' : undefined;
   const head = { stroke: color, strokeWidth: sw, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
   return (
@@ -467,19 +502,32 @@ function ArrowGlyph({
       <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="round" />
       <Path d={arrowHead(b, u)} {...head} />
       {arrow.type === 'inPlace' && <Path d={arrowHead(a, { x: -u.x, y: -u.y })} {...head} />}
-      {showLabel && (
+      {showLabel && strong && theme ? (
+        <G>
+          <Circle cx={arrow.labelAt.x} cy={arrow.labelAt.y} r={0.44} fill={theme.badge} stroke={theme.outline} strokeWidth={0.1} />
+          <SvgText
+            x={arrow.labelAt.x}
+            y={arrow.labelAt.y + 0.19}
+            fontSize={arrow.label.length > 1 ? 0.4 : 0.54}
+            fontFamily={SVG_FONT}
+            fill={theme.badgeText}
+            textAnchor="middle"
+          >
+            {arrow.label}
+          </SvgText>
+        </G>
+      ) : showLabel ? (
         <SvgText
           x={arrow.labelAt.x}
           y={arrow.labelAt.y + LABEL_SIZE * 0.36}
           fontSize={LABEL_SIZE}
-          fontWeight="800"
           fontFamily={SVG_FONT}
           fill={labelColor}
           textAnchor="middle"
         >
           {arrow.label}
         </SvgText>
-      )}
+      ) : null}
     </G>
   );
 }

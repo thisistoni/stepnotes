@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 
-import { Button } from '@/components/ui';
+import { Button } from '@/components/legacyUi';
+import { Header, Screen } from '@/components/ui';
 import { useDances } from '@/lib/store';
 import { colors } from '@/lib/theme';
 import { DanceValidationError } from '@/lib/validate';
@@ -23,6 +24,7 @@ export default function ImportScreen() {
   };
 
   return (
+    <Screen scroll={false} padded={false} header={<Header title="Import dance" leading="close" />}>
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <Text style={s.p}>
         Paste a dance that someone shared with you (“Share as text” on a dance), then tap Import.
@@ -35,7 +37,7 @@ export default function ImportScreen() {
         }}
         multiline
         placeholder='{"app": "stepnotes", …}'
-        placeholderTextColor="#A8A29E"
+        placeholderTextColor={colors.ink3}
         style={s.input}
         autoCapitalize="none"
         autoCorrect={false}
@@ -43,6 +45,7 @@ export default function ImportScreen() {
       {error && <Text style={s.error}>{error}</Text>}
       <Button label="Import" variant="primary" onPress={onImport} disabled={!text.trim()} style={{ marginTop: 12 }} />
     </ScrollView>
+    </Screen>
   );
 }
 
