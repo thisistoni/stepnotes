@@ -10,7 +10,21 @@ export function uid(prefix = 'id'): string {
 }
 
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-export const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+export const easeInOut = (t: number) => {
+  'worklet';
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+};
+
+/** Signed rotation (degrees, -180..180) that turns `from` into `to` the short way round. */
+export function shortestAngleDelta(from: number, to: number) {
+  let d = (to - from) % 360;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  return d;
+}
+
+/** Length of a step in beats; anything invalid counts as one beat. */
+export const stepBeats = (s: Pick<Step, 'beats'>) => (Number.isFinite(s.beats) && s.beats > 0 ? s.beats : 1);
 
 export function samePos(a: FootPos, b: FootPos, eps = 0.05) {
   return Math.abs(a.x - b.x) < eps && Math.abs(a.y - b.y) < eps;
@@ -43,7 +57,7 @@ export function computeStates(pattern: Pattern): FeetState[] {
 }
 
 export function totalBeats(pattern: Pattern) {
-  return pattern.steps.reduce((sum, s) => sum + (s.beats || 1), 0);
+  return pattern.steps.reduce((sum, s) => sum + stepBeats(s), 0);
 }
 
 /** Beat at which each step starts. */
@@ -52,13 +66,13 @@ export function stepStartBeats(pattern: Pattern) {
   let b = 0;
   for (const s of pattern.steps) {
     starts.push(b);
-    b += s.beats || 1;
+    b += stepBeats(s);
   }
   return starts;
 }
 
 /** Fraction of a step's duration used for the foot travelling. */
-const MOVE_FRACTION = 0.6;
+export const MOVE_FRACTION = 0.6;
 
 export interface Frame {
   /** -1 = start position, otherwise index of the current step */
@@ -80,7 +94,7 @@ export function frameAt(pattern: Pattern, states: FeetState[], beat: number): Fr
   let i = starts.length - 1;
   while (i > 0 && starts[i] > b) i--;
   const step = pattern.steps[i];
-  const local = (b - starts[i]) / (step.beats || 1);
+  const local = (b - starts[i]) / stepBeats(step);
   const t = easeInOut(Math.min(1, local / MOVE_FRACTION));
   const before = states[i];
   const after = states[i + 1];
@@ -91,7 +105,8 @@ export function frameAt(pattern: Pattern, states: FeetState[], beat: number): Fr
     feet[step.foot] = {
       x: lerp(from.x, to.x, t),
       y: lerp(from.y, to.y, t),
-      rot: lerp(from.rot, to.rot, t),
+      // turn the short way round (e.g. 170° -> -170° is a 20° turn, not 340°)
+      rot: from.rot + shortestAngleDelta(from.rot, to.rot) * t,
     };
   }
   return { index: i, feet, weight: t > 0.5 ? after.weight : before.weight, progress: t };
@@ -102,7 +117,7 @@ export function beatForStep(pattern: Pattern, index: number) {
   if (index < 0) return -1;
   const starts = stepStartBeats(pattern);
   const s = pattern.steps[index];
-  return starts[index] + (s.beats || 1) * 0.75;
+  return starts[index] + stepBeats(s) * 0.75;
 }
 
 /**
@@ -169,11 +184,13 @@ export function describeStep(step: Step, before: FeetState): string {
 
 /** Suggest the next count label, e.g. after "3" comes "4", after "8" comes "1". */
 export function nextCount(steps: Step[], beatsPerBar: number): string {
+  // 0, NaN or nonsense bar lengths must never produce "NaN" counts
+  const bar = Number.isFinite(beatsPerBar) ? Math.min(12, Math.max(1, Math.round(beatsPerBar))) : 4;
+  const max = bar <= 4 ? bar * 2 : bar;
   for (let i = steps.length - 1; i >= 0; i--) {
     const n = parseInt(steps[i].count, 10);
-    if (!Number.isNaN(n)) {
-      const max = beatsPerBar <= 4 ? beatsPerBar * 2 : beatsPerBar;
-      return String((n % max) + 1);
+    if (Number.isFinite(n)) {
+      return String((((n % max) + max) % max) + 1);
     }
   }
   return '1';
@@ -183,3 +200,124 @@ export const DEFAULT_START: Record<Foot, FootPos> = {
   L: { x: -0.6, y: 0, rot: 0 },
   R: { x: 0.6, y: 0, rot: 0 },
 };
+
+// --- precomputed timeline (for UI-thread animation) -------------------------------------------
+
+/**
+ * Keyframes of ONE foot, one entry per step (same index as `pattern.steps`).
+ * During step i the foot travels from (x0,y0,r0) to (x1,y1,r1) between beats b0[i] and b1[i]
+ * (eased, like `frameAt`), then rests. `r1` is already unwrapped so a plain lerp turns the short
+ * way round. `w0`/`w1` = how "solid" (weight-bearing) the foot is before / after the step
+ * (1 = carries weight or weight unknown, 0 = free); the UI cross-fades between them.
+ */
+export interface FootTrack {
+  b0: number[];
+  b1: number[];
+  x0: number[];
+  y0: number[];
+  r0: number[];
+  x1: number[];
+  y1: number[];
+  r1: number[];
+  w0: number[];
+  w1: number[];
+}
+
+/** Everything a worklet needs to pose the feet at any beat without touching the JS thread. */
+export interface Timeline {
+  /** Beat at which each step starts */
+  starts: number[];
+  /** Length of each step in beats */
+  durations: number[];
+  total: number;
+  start: Record<Foot, FootPos>;
+  L: FootTrack;
+  R: FootTrack;
+}
+
+export interface FootPose {
+  x: number;
+  y: number;
+  rot: number;
+  /** 0 = free foot, 1 = weight-bearing; fractional while the weight transfers */
+  solid: number;
+}
+
+const solidness = (state: FeetState, f: Foot) => (state.weight === null || state.weight === f ? 1 : 0);
+
+export function buildTimeline(pattern: Pattern, states: FeetState[] = computeStates(pattern)): Timeline {
+  const starts = stepStartBeats(pattern);
+  const durations = pattern.steps.map(stepBeats);
+  const track = (f: Foot): FootTrack => {
+    const t: FootTrack = { b0: [], b1: [], x0: [], y0: [], r0: [], x1: [], y1: [], r1: [], w0: [], w1: [] };
+    pattern.steps.forEach((step, i) => {
+      const before = states[i];
+      const after = states[i + 1];
+      const moving = step.kind !== 'hold' && step.foot === f;
+      const from = moving ? before.pos[f] : after.pos[f];
+      const to = after.pos[f];
+      t.b0.push(starts[i]);
+      t.b1.push(starts[i] + durations[i] * MOVE_FRACTION);
+      t.x0.push(from.x);
+      t.y0.push(from.y);
+      t.r0.push(from.rot);
+      t.x1.push(to.x);
+      t.y1.push(to.y);
+      t.r1.push(from.rot + shortestAngleDelta(from.rot, to.rot));
+      t.w0.push(solidness(before, f));
+      t.w1.push(solidness(after, f));
+    });
+    return t;
+  };
+  return {
+    starts,
+    durations,
+    total: totalBeats(pattern),
+    start: pattern.start,
+    L: track('L'),
+    R: track('R'),
+  };
+}
+
+/** Index of the step playing at `beat` (-1 = start position). Runs on either thread. */
+export function stepIndexAt(starts: number[], total: number, beat: number) {
+  'worklet';
+  if (beat < 0 || starts.length === 0) return -1;
+  const b = Math.min(beat, total - 1e-6);
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= b) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/**
+ * Pose of one foot at `beat`, interpolated from a precomputed track. Same maths as `frameAt`
+ * (position error ~0), plus a smooth `solid` value so the weight change can cross-fade
+ * instead of snapping at the half-way point. Worklet: safe to call from useAnimatedStyle.
+ */
+export function footPoseAt(tl: Timeline, foot: Foot, beat: number): FootPose {
+  'worklet';
+  const tr = foot === 'L' ? tl.L : tl.R;
+  const i = stepIndexAt(tl.starts, tl.total, beat);
+  if (i < 0) {
+    const p = foot === 'L' ? tl.start.L : tl.start.R;
+    return { x: p.x, y: p.y, rot: p.rot, solid: 1 };
+  }
+  const b = Math.min(beat, tl.total - 1e-6);
+  const span = tr.b1[i] - tr.b0[i];
+  const local = span > 0 ? (b - tr.b0[i]) / span : 1;
+  const t = easeInOut(Math.min(1, Math.max(0, local)));
+  // weight transfer: smoothstep centred on the half-way point of the travel (where frameAt switches)
+  const k = Math.min(1, Math.max(0, (t - 0.3) / 0.4));
+  const fade = k * k * (3 - 2 * k);
+  return {
+    x: tr.x0[i] + (tr.x1[i] - tr.x0[i]) * t,
+    y: tr.y0[i] + (tr.y1[i] - tr.y0[i]) * t,
+    rot: tr.r0[i] + (tr.r1[i] - tr.r0[i]) * t,
+    solid: tr.w0[i] + (tr.w1[i] - tr.w0[i]) * fade,
+  };
+}
