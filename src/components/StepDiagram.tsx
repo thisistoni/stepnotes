@@ -15,7 +15,7 @@
  *            next step's destination          faint dashed outline with its count
  *            where the moving foot came from  very faint outline
  *            every other position             barely visible (context only)
- *            turn cue                         curved arrow when the foot rotates ≥ 20°
+ *            turns                            no arrow of their own: the foot itself is drawn turned
  *            tap mark                         "TAP" tag on the badge; the foot lands light (never
  *                                             solid) with a dashed ripple
  *          It re-renders once per step (driven by the `index` prop, or by its own reaction on the
@@ -40,7 +40,6 @@ import {
   layoutLive,
   LABEL_SIZE,
   LIVE_BADGE_R,
-  TURN_ARC_R,
   type Bounds,
   type ChartArrow,
   type ChartLayout,
@@ -192,7 +191,7 @@ export const StepDiagram = memo(function StepDiagram({
   const states = useMemo(() => computeStates(layoutPattern), [layoutPattern]);
   // the printed-chart layout (arrow / label placement) is only needed for the chart
   const layout = useMemo(
-    () => (mode === 'overview' ? layoutChart(layoutPattern, states) : { feet: [], arrows: [], turns: [], bounds: EMPTY_BOUNDS }),
+    () => (mode === 'overview' ? layoutChart(layoutPattern, states) : { feet: [], arrows: [], bounds: EMPTY_BOUNDS }),
     [mode, layoutPattern, states],
   );
   // live layout: cheap, so a fixed pose (the editor dragging a foot) uses the CURRENT pattern and
@@ -305,7 +304,6 @@ export const StepDiagram = memo(function StepDiagram({
         showLabels={labelsVisible}
         letterSize={letterSize}
         unit={unit}
-        turns={layout.turns}
       />
       {mode === 'live' &&
         (beat && timeline && live ? (
@@ -361,7 +359,6 @@ interface StaticLayerProps {
   showLabels: boolean;
   letterSize: number;
   unit: number;
-  turns: { at: FootPos; turn: number }[];
 }
 
 const StaticLayer = memo(function StaticLayer({
@@ -378,7 +375,6 @@ const StaticLayer = memo(function StaticLayer({
   showLabels,
   letterSize,
   unit,
-  turns,
 }: StaticLayerProps) {
   const positions = live?.positions ?? layout.feet;
   const chartStroke = Math.max(0.1, 2.2 * unit);
@@ -405,9 +401,6 @@ const StaticLayer = memo(function StaticLayer({
               showLetter={showLetters}
               letterSize={letterSize}
             />
-          ))}
-          {turns.map((t, i) => (
-            <TurnCue key={`t${i}`} at={t.at} turn={t.turn} color={theme.activeArrow} width={Math.max(0.08, 1.8 * unit)} />
           ))}
           {/* every halo first, then every arrow, then every badge: no arrow is cut by another's halo */}
           {layout.arrows.map((a) => (
@@ -593,11 +586,6 @@ function FocusUnder({
           outline
         />
       )}
-      {cur?.turn ? <TurnCue at={cur.to} turn={cur.turn} color={theme.activeArrow} width={Math.max(0.12, 2.8 * unit)} /> : null}
-      {/* the weight-bearing foot swivels (a pivot): its own cue, so the whole turn of the body shows */}
-      {cur?.pivot && cur.pivotAt ? (
-        <TurnCue at={cur.pivotAt} turn={cur.pivot} color={theme.activeArrow} width={Math.max(0.12, 2.8 * unit)} />
-      ) : null}
       {cur?.arrow && <LiveArrowPath step={cur} color={theme.activeArrow} width={arrowW} unit={unit} />}
     </G>
   );
@@ -794,29 +782,6 @@ function LiveArrowPath({ step, color, width, unit }: { step: LiveStep; color: st
       <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={width} strokeDasharray={dash} strokeLinecap="round" />
       <Path d={arrowHead(b, u, head)} {...hs} />
       {ar.type === 'inPlace' && <Path d={arrowHead(a, { x: -u.x, y: -u.y }, head)} {...hs} />}
-    </G>
-  );
-}
-
-/** Curved arrow around a foot showing which way (and roughly how far) it turns. */
-function TurnCue({ at, turn, color, width }: { at: FootPos; turn: number; color: string; width: number }) {
-  const sign = Math.sign(turn) || 1;
-  // draw at least 70° of arc so small turns are still noticed; centred on the turn
-  const span = Math.max(70, Math.min(160, Math.abs(turn)));
-  const midDeg = at.rot - turn / 2;
-  const a0 = ((midDeg - (sign * span) / 2) * Math.PI) / 180;
-  const a1 = ((midDeg + (sign * span) / 2) * Math.PI) / 180;
-  const R = TURN_ARC_R;
-  const p = (ang: number) => ({ x: at.x + R * Math.sin(ang), y: at.y - R * Math.cos(ang) });
-  const p0 = p(a0);
-  const p1 = p(a1);
-  const tangent = { x: Math.cos(a1) * sign, y: Math.sin(a1) * sign };
-  const d = `M${p0.x},${p0.y} A${R},${R} 0 0 ${sign > 0 ? 1 : 0} ${p1.x},${p1.y}`;
-  const hs = { stroke: color, strokeWidth: width, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
-  return (
-    <G>
-      <Path d={d} {...hs} />
-      <Path d={arrowHead(p1, tangent, Math.max(0.3, width * 2.3))} {...hs} />
     </G>
   );
 }
