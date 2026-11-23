@@ -3,7 +3,7 @@
  *
  * Voice: a warm dance teacher, informal "du", short sentences, no software-manual German.
  * Austrian standard German with ß (Fuß, schließt); neutral vocabulary; light Austrian touches
- * only where they feel natural ("Servus", "Passt"). Quotes „…“.
+ * only where they feel natural ("Passt"). Quotes „…“.
  *
  * Glossary (keep consistent):
  *   leader / follower / both   Führen / Folgen / Beide   (in sentences: wer führt, wer folgt, beim Führen)
@@ -132,7 +132,7 @@ export const de: Strings = {
     previous: 'Zurück',
     skip: 'Überspringen',
     skipHint: 'Überspringt die Einführung und öffnet deine Tänze',
-    promise: 'Servus! Lern jeden Tanzschritt – Fußabdruck für Fußabdruck.',
+    promise: 'Hallo! Lern jeden Tanzschritt – Fußabdruck für Fußabdruck.',
     getStarted: 'Loslegen',
     continue: 'Weiter',
     startDancing: 'Los geht’s',
