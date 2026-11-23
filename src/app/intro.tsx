@@ -1,47 +1,122 @@
 /**
- * Intro — MINIMAL STUB. The Intro engineer replaces this with the 3-step intro (welcome, role,
- * "How to read the footprints" lesson; `?lesson=1` opens the lesson on its own).
+ * First-run intro: Welcome → Role → "How to read the footprints" (three short steps, skippable).
+ * `/intro?lesson=1` shows only the lesson, with a close button, and leaves prefs alone.
  */
-import { router, useLocalSearchParams } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useRef, useState, type ComponentRef } from 'react';
+import { BackHandler, ScrollView, StyleSheet } from 'react-native';
 
-import { Button, Entrance, FootSticker, Header, Screen, Text } from '@/components/ui';
+import { IntroTopBar } from '@/components/intro/IntroTopBar';
+import { LessonStep } from '@/components/intro/LessonStep';
+import { RoleStep, type RoleChoice } from '@/components/intro/RoleStep';
+import { StepTransition } from '@/components/intro/StepTransition';
+import { WelcomeStep } from '@/components/intro/WelcomeStep';
+import { Button, goBackOrHome, Header, Screen } from '@/components/ui';
 import { usePrefs } from '@/lib/prefs';
-import { ROLE_COLOR, STYLE_COLORS, space } from '@/lib/theme';
+import { space } from '@/lib/theme';
+import type { Role } from '@/lib/types';
+
+const STEPS = 3;
 
 export default function Intro() {
-  const { prefs, set } = usePrefs();
   const { lesson } = useLocalSearchParams<{ lesson?: string }>();
-  const start = async () => {
-    await set({ onboardingDone: true });
-    router.replace('/');
-  };
+  return lesson === '1' ? <LessonOnly /> : <IntroFlow />;
+}
+
+/** The lesson on its own (from the Library's "How to read the footprints" card). */
+function LessonOnly() {
+  const { prefs } = usePrefs();
   return (
     <Screen
-      header={prefs.onboardingDone || lesson ? <Header /> : undefined}
-      footer={<Button label={prefs.onboardingDone ? 'Back to my dances' : 'Get started'} onPress={start} testID="intro-start" />}
-      contentStyle={s.content}
+      header={<Header leading="close" onBack={goBackOrHome} />}
+      footer={<Button label="Got it" onPress={goBackOrHome} testID="intro-primary" />}
+      contentStyle={[s.grow, s.tight]}
+      testID="intro-screen"
     >
-      <Entrance index={0} style={s.art}>
-        <FootSticker tone={STYLE_COLORS.bachata} size={64} rotate={-14} />
-        <FootSticker tone={ROLE_COLOR.leader} foot="R" size={64} rotate={10} style={s.raised} />
-        <FootSticker tone={STYLE_COLORS.salsa} size={64} rotate={-6} />
-      </Entrance>
-      <Entrance index={1}>
-        <Text variant="display">StepNotes</Text>
-      </Entrance>
-      <Entrance index={2}>
-        <Text variant="body" color="ink2" style={s.line}>
-          Learn any dance step, one footprint at a time.
-        </Text>
-      </Entrance>
+      <LessonStep role={prefs.preferredRole} />
+    </Screen>
+  );
+}
+
+function IntroFlow() {
+  const { prefs, set } = usePrefs();
+  const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState<1 | -1 | 0>(0);
+  const [choice, setChoice] = useState<RoleChoice | null>(null);
+  const finishing = useRef(false);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+
+  const go = useCallback(
+    (next: number) => {
+      if (next < 0 || next >= STEPS || next === step) return;
+      setDirection(next > step ? 1 : -1);
+      setStep(next);
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    },
+    [step],
+  );
+
+  const finish = useCallback(async () => {
+    if (finishing.current) return;
+    finishing.current = true;
+    await set({ onboardingDone: true });
+    router.replace('/');
+  }, [set]);
+
+  const choose = (c: RoleChoice) => {
+    setChoice(c);
+    // "Both / not sure" starts on the leader's part
+    void set({ preferredRole: c === 'follower' ? 'follower' : 'leader' });
+    // on short phones the coach's answer sits below the fold: bring it into view
+    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+  };
+
+  // Android back button steps back through the intro instead of leaving the app.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (step === 0) return false;
+        go(step - 1);
+        return true;
+      });
+      return () => sub.remove();
+    }, [step, go]),
+  );
+
+  const role: Role = choice ? (choice === 'follower' ? 'follower' : 'leader') : prefs.preferredRole;
+
+  const footer =
+    step === 0 ? (
+      <Button label="Get started" onPress={() => go(1)} testID="intro-primary" />
+    ) : step === 1 ? (
+      <Button label="Continue" disabled={!choice} onPress={() => go(2)} testID="intro-primary" />
+    ) : (
+      <Button label="Start dancing" onPress={finish} testID="intro-primary" />
+    );
+
+  return (
+    <Screen
+      header={<IntroTopBar step={step} total={STEPS} onBack={() => go(step - 1)} onSkip={finish} />}
+      footer={footer}
+      contentStyle={[s.grow, s.tight]}
+      scrollRef={scrollRef}
+      testID="intro-screen"
+    >
+      <StepTransition key={step} direction={direction}>
+        {step === 0 ? (
+          <WelcomeStep animate={direction === 0} />
+        ) : step === 1 ? (
+          <RoleStep value={choice} onChange={choose} />
+        ) : (
+          <LessonStep role={role} />
+        )}
+      </StepTransition>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  content: { flexGrow: 1, justifyContent: 'center', paddingTop: space.xxl },
-  art: { flexDirection: 'row', alignItems: 'flex-end', gap: space.s, marginBottom: space.xl },
-  raised: { marginBottom: 28 },
-  line: { marginTop: space.s, maxWidth: 320 },
+  grow: { flexGrow: 1 },
+  /** Content may run right up to the pinned button (the lesson stage absorbs the slack). */
+  tight: { paddingBottom: space.s },
 });
