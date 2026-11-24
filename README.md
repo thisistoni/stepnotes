@@ -1,4 +1,4 @@
-# StepNotes
+# Waltzy
 
 A mobile app (iOS and Android, built with Expo / React Native) for **learning and writing down dance steps as footprint diagrams**: the numbered "feet and arrows" charts dance schools hand out, but animated, slowed down and editable.
 

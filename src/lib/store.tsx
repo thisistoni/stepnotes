@@ -8,7 +8,9 @@ import type { Dance } from './types';
 import { parseDance, parseDanceJson } from './validate';
 
 /** Keep this key: existing installs (and the web QA harness) store user dances under it. */
-export const STORAGE_KEY = 'stepnotes.dances.v1';
+export const STORAGE_KEY = 'waltzy.dances.v1';
+/** Where dances were stored while the app was called StepNotes */
+const LEGACY_STORAGE_KEY = 'stepnotes.dances.v1';
 
 export interface DanceStore {
   /** false until the user's dances have been read from storage */
@@ -61,7 +63,7 @@ function sanitizeStored(raw: unknown, dropped: () => void): Dance[] {
 const EMPTY: Dance[] = [];
 
 export function DanceProvider({ children }: { children: ReactNode }) {
-  const { value: custom, ready, update } = usePersistedValue<Dance[]>(STORAGE_KEY, EMPTY, sanitizeStored);
+  const { value: custom, ready, update } = usePersistedValue<Dance[]>(STORAGE_KEY, EMPTY, sanitizeStored, { legacyKey: LEGACY_STORAGE_KEY });
   const t = useT();
   /** latest dictionary for the actions (stable callbacks, current language) */
   const tRef = useRef(t);
@@ -176,7 +178,7 @@ export function newDance(): Dance {
 /** Strip internal fields before sharing. */
 export function exportJson(d: Dance) {
   const { builtIn: _b, ...rest } = d;
-  return JSON.stringify({ app: 'stepnotes', version: 1, ...rest }, null, 2);
+  return JSON.stringify({ app: 'waltzy', version: 1, ...rest }, null, 2);
 }
 
 /** The text a share sends: one friendly line, then the dance (import ignores the text around it). */

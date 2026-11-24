@@ -122,7 +122,7 @@ export default function ImportScreen() {
           minHeight={200}
           mono
           clearable
-          placeholder={'{ "app": "stepnotes", … }'}
+          placeholder={'{ "app": "waltzy", … }'}
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}

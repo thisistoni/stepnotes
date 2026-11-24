@@ -22,6 +22,11 @@ interface Options {
    * succeeded, and `update` rejects with a `PersistError` otherwise.
    */
   optimistic?: boolean;
+  /**
+   * The key this value was stored under before the app was renamed. Read once, when nothing is
+   * stored under `key` yet, so nobody loses their dances; later writes go to `key`.
+   */
+  legacyKey?: string;
 }
 
 /**
@@ -37,7 +42,7 @@ interface Options {
  * throw, and calls `dropped()` if it had to discard part of the data. Unparsable JSON and data
  * that was partly dropped are copied to `<key>.corrupt` before they can be overwritten.
  */
-export function usePersistedValue<T>(key: string, initial: T, sanitize: (raw: unknown, dropped: () => void) => T, { optimistic = false }: Options = {}) {
+export function usePersistedValue<T>(key: string, initial: T, sanitize: (raw: unknown, dropped: () => void) => T, { optimistic = false, legacyKey }: Options = {}) {
   const [value, setValue] = useState<T>(initial);
   const [ready, setReady] = useState(false);
   const current = useRef<T>(initial);
@@ -55,6 +60,7 @@ export function usePersistedValue<T>(key: string, initial: T, sanitize: (raw: un
     let raw: string | null;
     try {
       raw = await AsyncStorage.getItem(key);
+      if (raw == null && legacyKey) raw = await AsyncStorage.getItem(legacyKey);
     } catch (e) {
       console.warn(`Could not load "${key}"`, e);
       loadFailed.current = true;
@@ -78,7 +84,7 @@ export function usePersistedValue<T>(key: string, initial: T, sanitize: (raw: un
       setValue(clean);
     }
     return true;
-  }, [key]);
+  }, [key, legacyKey]);
 
   useEffect(() => {
     unmounted.current = false;

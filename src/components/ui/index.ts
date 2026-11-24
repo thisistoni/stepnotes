@@ -1,5 +1,5 @@
 /**
- * StepNotes UI kit ("Playful Pop"). Import everything from '@/components/ui'.
+ * Waltzy UI kit ("Playful Pop"). Import everything from '@/components/ui'.
  *
  * Rules: never set fontFamily/fontWeight (use <Text variant>), never hard-code colours (tokens
  * in '@/lib/theme'), build tappable surfaces on PressableLip, ≥44pt targets, haptics via

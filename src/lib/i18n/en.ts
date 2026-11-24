@@ -272,10 +272,10 @@ export const en = {
 
   share: {
     /** First line of a shared dance (the import ignores text around the dance) */
-    prefix: 'A StepNotes dance. Copy all of this text and paste it into StepNotes under Import:',
+    prefix: 'A Waltzy dance. Copy all of this text and paste it into Waltzy under Import:',
     failed: 'Could not open sharing. Please try again.',
     copied: 'Dance copied. Paste it into a message to share it.',
-    unsupported: 'This browser cannot share or copy. Open StepNotes on your phone to share.',
+    unsupported: 'This browser cannot share or copy. Open Waltzy on your phone to share.',
   },
 
   notFound: {
@@ -425,7 +425,7 @@ export const en = {
     paste: 'Paste',
     preview: (name: string, style: string, steps: number, follower: boolean) =>
       `Ready to add ${q(name)} · ${[style, pl(steps, { one: '# step', other: '# steps' }), follower ? 'leader + follower' : ''].filter(Boolean).join(' · ')}`,
-    notADance: 'That doesn’t look like a StepNotes dance. Ask the sender to share it again.',
+    notADance: 'That doesn’t look like a Waltzy dance. Ask the sender to share it again.',
     added: (name: string) => `${q(name)} added to your dances`,
     saveFailed: 'Could not save this dance. Please try again.',
     clipboardEmpty: 'The clipboard is empty',
@@ -449,10 +449,10 @@ export const en = {
     notAStep: 'is not a step.',
     badKind: '“kind” should be "step", "tap" or "hold".',
     badBeats: '“beats” (the step length) must be greater than 0.',
-    notADance: 'This does not look like a StepNotes dance.',
-    noRoles: 'This does not look like a StepNotes dance (it has no steps).',
+    notADance: 'This does not look like a Waltzy dance.',
+    noRoles: 'This does not look like a Waltzy dance (it has no steps).',
     empty: 'Paste a dance first.',
-    noJson: 'This is not a StepNotes dance. A shared dance is a block of text that starts with { and ends with }.',
+    noJson: 'This is not a Waltzy dance. A shared dance is a block of text that starts with { and ends with }.',
     badJson: 'This text could not be read. It may have been cut off or changed: copy the whole shared text again, from { to }.',
   },
 

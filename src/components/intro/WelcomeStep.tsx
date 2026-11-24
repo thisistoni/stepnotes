@@ -87,7 +87,7 @@ export function WelcomeStep({ animate }: { animate: boolean }) {
       </View>
       <Entrance index={2}>
         <Text variant="display" align="center" accessibilityRole="header">
-          StepNotes
+          Waltzy
         </Text>
       </Entrance>
       <Entrance index={4}>

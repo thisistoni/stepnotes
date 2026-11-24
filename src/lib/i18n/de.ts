@@ -309,10 +309,10 @@ export const de: Strings = {
   },
 
   share: {
-    prefix: 'Ein Tanz für StepNotes. Kopier den ganzen Text und füg ihn in StepNotes unter „Importieren“ ein:',
+    prefix: 'Ein Tanz für Waltzy. Kopier den ganzen Text und füg ihn in Waltzy unter „Importieren“ ein:',
     failed: 'Teilen hat nicht geklappt. Probier es bitte noch einmal.',
     copied: 'Tanz kopiert. Füg ihn in eine Nachricht ein, um ihn zu teilen.',
-    unsupported: 'Dieser Browser kann weder teilen noch kopieren. Öffne StepNotes am Handy, um zu teilen.',
+    unsupported: 'Dieser Browser kann weder teilen noch kopieren. Öffne Waltzy am Handy, um zu teilen.',
   },
 
   notFound: {
@@ -457,7 +457,7 @@ export const de: Strings = {
     paste: 'Einfügen',
     preview: (name: string, style: string, steps: number, follower: boolean) =>
       `Bereit: ${q(name)} · ${[style, pl(steps, { one: '# Schritt', other: '# Schritte' }), follower ? 'Führen + Folgen' : ''].filter(Boolean).join(' · ')}`,
-    notADance: 'Das ist leider kein StepNotes-Tanz. Lass ihn dir am besten noch einmal schicken.',
+    notADance: 'Das ist leider kein Waltzy-Tanz. Lass ihn dir am besten noch einmal schicken.',
     added: (name: string) => `${q(name)} ist jetzt bei deinen Tänzen`,
     saveFailed: 'Speichern hat nicht geklappt. Probier es bitte noch einmal.',
     clipboardEmpty: 'Die Zwischenablage ist leer',
@@ -482,10 +482,10 @@ export const de: Strings = {
     notAStep: 'Das ist kein Schritt.',
     badKind: '„kind“ muss „step“, „tap“ oder „hold“ sein.',
     badBeats: '„beats“ (die Schrittlänge) muss größer als 0 sein.',
-    notADance: 'Das sieht nicht nach einem StepNotes-Tanz aus.',
-    noRoles: 'Das sieht nicht nach einem StepNotes-Tanz aus (es fehlen die Schritte).',
+    notADance: 'Das sieht nicht nach einem Waltzy-Tanz aus.',
+    noRoles: 'Das sieht nicht nach einem Waltzy-Tanz aus (es fehlen die Schritte).',
     empty: 'Füg zuerst einen Tanz ein.',
-    noJson: 'Das ist kein StepNotes-Tanz. Ein geteilter Tanz ist ein Textblock, der mit { beginnt und mit } endet.',
+    noJson: 'Das ist kein Waltzy-Tanz. Ein geteilter Tanz ist ein Textblock, der mit { beginnt und mit } endet.',
     badJson: 'Dieser Text lässt sich nicht lesen. Vielleicht wurde er abgeschnitten oder verändert: Kopier den ganzen geteilten Text noch einmal, von { bis }.',
   },
 

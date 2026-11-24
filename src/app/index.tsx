@@ -45,7 +45,7 @@ export default function Library() {
     <Screen padded={false} fab={<Fab label={t.library.create} onPress={create} testID="fab-create" />} testID="library">
       <Header
         large
-        eyebrow="StepNotes"
+        eyebrow="Waltzy"
         title={t.library.title}
         right={
           <>

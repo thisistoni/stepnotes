@@ -12,7 +12,7 @@ function isAbort(e: unknown) {
 }
 
 /**
- * Share a dance as StepNotes JSON text. Native: the system share sheet. Web: the browser share
+ * Share a dance as Waltzy JSON text. Native: the system share sheet. Web: the browser share
  * sheet when there is one, otherwise the text is copied to the clipboard; if neither exists a toast
  * explains. Never throws.
  */

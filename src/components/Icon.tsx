@@ -1,5 +1,5 @@
 /**
- * StepNotes icon set: rounded 2.25px strokes on a 24×24 grid, drawn with react-native-svg so
+ * Waltzy icon set: rounded 2.25px strokes on a 24×24 grid, drawn with react-native-svg so
  * icons are identical on iOS, Android and web and never flash blank (no icon font to load).
  *
  *   <Icon name="play" size={24} color={colors.ink} />
@@ -156,7 +156,7 @@ export interface IconProps {
   style?: StyleProp<ViewStyle>;
 }
 
-/** One icon from the StepNotes set. Decorative by default (hidden from screen readers). */
+/** One icon from the Waltzy set. Decorative by default (hidden from screen readers). */
 export const Icon = memo(function Icon({
   name,
   size = 24,

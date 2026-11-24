@@ -12,7 +12,9 @@ import { DEFAULT_LANGUAGE, isLanguage, type Language } from './i18n/languages';
 import { usePersistedValue } from './persist';
 import type { Role } from './types';
 
-export const PREFS_KEY = 'stepnotes.prefs.v1';
+export const PREFS_KEY = 'waltzy.prefs.v1';
+/** Where the settings were stored while the app was called StepNotes */
+const LEGACY_PREFS_KEY = 'stepnotes.prefs.v1';
 
 export interface Prefs {
   onboardingDone: boolean;
@@ -71,7 +73,7 @@ interface PrefsStore {
 const Ctx = createContext<PrefsStore | null>(null);
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
-  const { value: prefs, ready, update } = usePersistedValue<Prefs>(PREFS_KEY, DEFAULT_PREFS, sanitizeStored, { optimistic: true });
+  const { value: prefs, ready, update } = usePersistedValue<Prefs>(PREFS_KEY, DEFAULT_PREFS, sanitizeStored, { optimistic: true, legacyKey: LEGACY_PREFS_KEY });
 
   const set = useCallback(
     (patch: Partial<Prefs>) =>

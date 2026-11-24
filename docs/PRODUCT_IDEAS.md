@@ -2,7 +2,7 @@
 
 ## Who would use this, and why
 
-| User | Problem today | What StepNotes gives them |
+| User | Problem today | What Waltzy gives them |
 |---|---|---|
 | **Beginner student** | Forgets the steps between classes. Videos are too fast and filmed from the wrong angle. | Slow animated footprints from *their own* point of view, spoken counts, mirror mode |
 | **Dance teacher** (likely your dancer) | Draws charts by hand or in Illustrator (like the reference images), or sends videos | Make a pattern in a couple of minutes and share it with the whole class |
