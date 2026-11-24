@@ -89,8 +89,11 @@ export function Button({
       accessibilityState={{ busy: !!loading }}
       testID={testID}
       hitSlop={sz.h < layout.minTap ? (layout.minTap - sz.h) / 2 : undefined}
-      style={[inline && { alignSelf: 'flex-start' }, style]}
-      faceStyle={[s.face, { minHeight: sz.h, paddingHorizontal: ghost ? 12 : sz.px }]}
+      // Fixed heights, not "at least": a shrink-to-fit button with a growing face was laid out
+      // endlessly tall on iOS (the empty-library card). A label is always one line, so the
+      // height never needs to follow the content.
+      style={[{ height: sz.h + (ghost ? 0 : sz.lip) }, inline && { alignSelf: 'flex-start' }, style]}
+      faceStyle={[s.face, { height: sz.h, paddingHorizontal: ghost ? 12 : sz.px }]}
     >
       <View style={[s.row, loading && s.hidden]}>
         {icon && <Icon name={icon} size={sz.icon} color={fg} strokeWidth={2.5} />}
@@ -110,8 +113,8 @@ export function Button({
 }
 
 const s = StyleSheet.create({
-  face: { alignItems: 'center', justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
+  face: { alignItems: 'center', justifyContent: 'center', flexGrow: 0 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexShrink: 1 },
   label: { flexShrink: 1 },
   hidden: { opacity: 0 },
   ghostText: { fontFamily: typography.smallStrong.fontFamily, fontSize: 15, letterSpacing: 0 },
