@@ -15,7 +15,7 @@
  *            next step's destination          faint dashed outline with its count
  *            where the moving foot came from  very faint outline
  *            every other position             barely visible (context only)
- *            turns                            no arrow of their own: the foot itself is drawn turned
+ *            turns                            the foot is drawn turned and its arrow curves the same way
  *            tap mark                         "TAP" tag on the badge; the foot lands light (never
  *                                             solid) with a dashed ripple
  *          It re-renders once per step (driven by the `index` prop, or by its own reaction on the
@@ -37,6 +37,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 import {
   growTo,
   layoutChart,
+  bendControl,
+  bentSegments,
   layoutLive,
   LABEL_SIZE,
   LIVE_BADGE_R,
@@ -703,6 +705,9 @@ function liveGlyph(step: LiveStep, unit: number, bounds?: Bounds) {
     b = { x: b.x + o.x, y: b.y + o.y };
     badge = { x: badge.x + o.x, y: badge.y + o.y };
   }
+  // a bent arrow (the foot turns on its way): its control point, and the direction it arrives in
+  let c: Vec | null = null;
+  let uEnd = u;
   if (ar.type === 'move') {
     const min = LIVE_MIN_ARROW_PX * unit;
     if (len < min) {
@@ -710,12 +715,21 @@ function liveGlyph(step: LiveStep, unit: number, bounds?: Bounds) {
       a = { x: a.x - u.x * e, y: a.y - u.y * e };
       b = { x: b.x + u.x * e, y: b.y + u.y * e };
     }
+    c = bendControl(a, b, ar.bend);
+    if (c) {
+      const l = Math.hypot(b.x - c.x, b.y - c.y) || 1;
+      uEnd = { x: (b.x - c.x) / l, y: (b.y - c.y) / l };
+    }
     // the layout puts the badge on a long arrow and beside a short one; on screen it must leave
     // most of the arrow and all of its head visible
     const besideAlready = len < LIVE_BADGE_R * 2 + 1.2;
     if (besideAlready || step.closing || 2 * r > 0.4 * Math.max(len, min)) {
       const t = Math.max(0, Math.min(1, ((badge.x - a.x) * (b.x - a.x) + (badge.y - a.y) * (b.y - a.y)) / Math.max(min, len) ** 2));
-      const near = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      const bow = c ? 2 * t * (1 - t) : 0;
+      const near = {
+        x: a.x + (b.x - a.x) * t + (c ? c.x - (a.x + b.x) / 2 : 0) * bow,
+        y: a.y + (b.y - a.y) * t + (c ? c.y - (a.y + b.y) / 2 : 0) * bow,
+      };
       let side = { x: badge.x - near.x, y: badge.y - near.y };
       let d = Math.hypot(side.x, side.y);
       if (d < 0.05) {
@@ -729,10 +743,10 @@ function liveGlyph(step: LiveStep, unit: number, bounds?: Bounds) {
         side = { x: side.x / d, y: side.y / d };
       }
       // clear of the shaft and of both strokes of the head
-      const n = { x: -u.y, y: u.x };
-      const back = { x: b.x - u.x * head, y: b.y - u.y * head };
+      const n = { x: -uEnd.y, y: uEnd.x };
+      const back = { x: b.x - uEnd.x * head, y: b.y - uEnd.y * head };
       const segs: [Vec, Vec][] = [
-        [a, b],
+        ...bentSegments(a, b, ar.bend),
         [b, { x: back.x + n.x * head * 0.8, y: back.y + n.y * head * 0.8 }],
         [b, { x: back.x - n.x * head * 0.8, y: back.y - n.y * head * 0.8 }],
       ];
@@ -768,19 +782,23 @@ function liveGlyph(step: LiveStep, unit: number, bounds?: Bounds) {
       badge = { x: badge.x + n.x * s * short, y: badge.y + n.y * s * short };
     }
   }
-  return { a, b, u, badge, r, width, head };
+  return { a, b, c, u, uEnd, badge, r, width, head };
 }
 
 function LiveArrowPath({ step, color, width, unit }: { step: LiveStep; color: string; width: number; unit: number }) {
   const ar = step.arrow!;
-  const { a, b, u } = liveGlyph(step, unit);
+  const { a, b, c, u, uEnd } = liveGlyph(step, unit);
   const head = Math.max(0.34, width * 2.3);
   const dash = ar.dashed ? `${width * 1.6} ${width * 1.7}` : undefined;
   const hs = { stroke: color, strokeWidth: width, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
   return (
     <G>
-      <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={width} strokeDasharray={dash} strokeLinecap="round" />
-      <Path d={arrowHead(b, u, head)} {...hs} />
+      {c ? (
+        <Path d={`M${a.x},${a.y} Q${c.x},${c.y} ${b.x},${b.y}`} {...hs} strokeDasharray={dash} />
+      ) : (
+        <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={width} strokeDasharray={dash} strokeLinecap="round" />
+      )}
+      <Path d={arrowHead(b, uEnd, head)} {...hs} />
       {ar.type === 'inPlace' && <Path d={arrowHead(a, { x: -u.x, y: -u.y }, head)} {...hs} />}
     </G>
   );

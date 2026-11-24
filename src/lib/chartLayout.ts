@@ -1,4 +1,4 @@
-import { samePos, type FeetState } from './pattern';
+import { samePos, stepTurn, type FeetState } from './pattern';
 import type { Foot, FootPos, Pattern } from './types';
 
 /**
@@ -615,6 +615,43 @@ export interface LiveArrow {
   /** centre of the count badge (on the arrow, at its midpoint) */
   badge: Vec;
   dashed: boolean;
+  /**
+   * How far the arrow's direction swings from tail to head, in degrees (positive = clockwise);
+   * 0 = straight. A foot that turns while it travels gets an arrow that curves the same way.
+   */
+  bend: number;
+}
+
+/** Turns of the moving foot smaller than this (degrees) leave its arrow straight. */
+export const TURN_MIN_DEG = 20;
+
+/**
+ * The bend of the arrow of a foot turning by `turn` degrees on its way: about the turn itself,
+ * but never so slight that it passes for straight, nor so tight that the arrow curls up.
+ */
+export function arrowBend(turn: number) {
+  const t = Math.abs(turn);
+  return t < TURN_MIN_DEG ? 0 : Math.sign(turn) * Math.max(55, Math.min(110, t));
+}
+
+/** Control point of a bent arrow from `a` to `b` (a quadratic curve); null when it is straight. */
+export function bendControl(a: Vec, b: Vec, bend: number): Vec | null {
+  if (!bend) return null;
+  const k = (Math.sign(bend) * Math.tan((Math.abs(bend) * Math.PI) / 360)) / 2;
+  return { x: (a.x + b.x) / 2 + (b.y - a.y) * k, y: (a.y + b.y) / 2 - (b.x - a.x) * k };
+}
+
+/** The arrow from `a` to `b` as line segments: the chord itself, or its bent curve in pieces. */
+export function bentSegments(a: Vec, b: Vec, bend: number, pieces = 8): [Vec, Vec][] {
+  const c = bendControl(a, b, bend);
+  if (!c) return [[a, b]];
+  const at = (t: number) => ({
+    x: (1 - t) * (1 - t) * a.x + 2 * t * (1 - t) * c.x + t * t * b.x,
+    y: (1 - t) * (1 - t) * a.y + 2 * t * (1 - t) * c.y + t * t * b.y,
+  });
+  const out: [Vec, Vec][] = [];
+  for (let i = 0; i < pieces; i++) out.push([at(i / pieces), at((i + 1) / pieces)]);
+  return out;
 }
 
 export interface LiveStep {
@@ -683,7 +720,7 @@ export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
       const side = Math.sign(s[0].x - to.x) || outward;
       // beside the short double arrow, never on it
       const badge = placeBadge(s[0], s[1], { x: side, y: 0 }, [other, ...own], [[s[0], s[1]]]);
-      const arrow: LiveArrow = { type: 'inPlace', a: s[0], b: s[1], badge, dashed };
+      const arrow: LiveArrow = { type: 'inPlace', a: s[0], b: s[1], badge, dashed, bend: 0 };
       return { ...base, arrow };
     }
 
@@ -701,12 +738,15 @@ export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
       { x: from.x + u.x * shrink + n.x * off, y: from.y + u.y * shrink + n.y * off },
       { x: to.x - u.x * shrink + n.x * off, y: to.y - u.y * shrink + n.y * off },
     ];
+    // a foot that turns on its way gets an arrow that curves the same way
+    const bend = arrowBend(stepTurn(step, from.rot));
+    const curve = (c: [Vec, Vec]) => bentSegments(c[0], c[1], bend);
     let s: [Vec, Vec] | null = null;
     let used = pref;
     for (let k = 0; k < 6 && !s; k++) {
       for (const side of [pref, -pref]) {
         const c = segFor(side * (sideways + k * 0.45));
-        if (clear(c[0], c[1], 0.25) && clearOwn(c[0], c[1])) {
+        if (curve(c).every(([p, q]) => clear(p, q, 0.25) && clearOwn(p, q))) {
           s = c;
           used = side;
           break;
@@ -720,8 +760,11 @@ export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
     const arrowLen = hypot(s[1].x - s[0].x, s[1].y - s[0].y);
     const outV = { x: n.x * used, y: n.y * used };
     const obstacles: [Vec, Vec][] = [other, ...own, ...path];
-    const badge = placeBadge(s[0], s[1], outV, obstacles, arrowLen < LIVE_BADGE_R * 2 + 1.2 ? [[s[0], s[1]]] : []);
-    const arrow: LiveArrow = { type: 'move', a: s[0], b: s[1], badge, dashed };
+    const ctrl = bendControl(s[0], s[1], bend);
+    const m = mid(s[0], s[1]);
+    const bow = ctrl ? { x: ctrl.x - m.x, y: ctrl.y - m.y } : undefined;
+    const badge = placeBadge(s[0], s[1], outV, obstacles, arrowLen < LIVE_BADGE_R * 2 + 1.2 ? curve(s) : [], bow);
+    const arrow: LiveArrow = { type: 'move', a: s[0], b: s[1], badge, dashed, bend };
     return { ...base, arrow };
   });
 
@@ -739,6 +782,10 @@ export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
     if (st.arrow) {
       xs.push(st.arrow.a.x, st.arrow.b.x, st.arrow.badge.x - LIVE_BADGE_R - 0.1, st.arrow.badge.x + LIVE_BADGE_R + 0.1);
       ys.push(st.arrow.a.y, st.arrow.b.y, st.arrow.badge.y - LIVE_BADGE_R - 0.1, st.arrow.badge.y + LIVE_BADGE_R + 0.1);
+      for (const [q] of bentSegments(st.arrow.a, st.arrow.b, st.arrow.bend, 4)) {
+        xs.push(q.x);
+        ys.push(q.y);
+      }
     }
   });
   const m = 0.55;
@@ -747,11 +794,12 @@ export function layoutLive(pattern: Pattern, states: FeetState[]): LiveLayout {
 }
 
 /**
- * Where to put a live count badge: beside its arrow, never on a foot. Candidates slide along the
+ * Where to put a live count badge: on or beside its arrow (`bow`: control point of a bent arrow
+ * relative to the chord's middle), never on a foot. Candidates slide along the
  * arrow and step outwards (away from the foot's path) until the badge clears the moving foot's
  * whole travel (origin → destination), the other foot, and every other obstacle given.
  */
-function placeBadge(a: Vec, b: Vec, out: Vec, obstacles: [Vec, Vec][], lines: [Vec, Vec][] = []): Vec {
+function placeBadge(a: Vec, b: Vec, out: Vec, obstacles: [Vec, Vec][], lines: [Vec, Vec][] = [], bow?: Vec): Vec {
   const r = LIVE_BADGE_R + 0.12;
   const clearOf = (c: Vec) =>
     Math.min(
@@ -762,7 +810,12 @@ function placeBadge(a: Vec, b: Vec, out: Vec, obstacles: [Vec, Vec][], lines: [V
   let bestScore = -Infinity;
   for (const extra of [0, 0.25, 0.5, 0.8, 1.1, 1.45]) {
     for (const t of [0.5, 0.4, 0.6, 0.3, 0.7]) {
-      const c = { x: a.x + (b.x - a.x) * t + out.x * extra, y: a.y + (b.y - a.y) * t + out.y * extra };
+      // on a bent arrow the badge rides the curve, not the chord
+      const w = bow ? 2 * t * (1 - t) : 0;
+      const c = {
+        x: a.x + (b.x - a.x) * t + out.x * extra + (bow?.x ?? 0) * w,
+        y: a.y + (b.y - a.y) * t + out.y * extra + (bow?.y ?? 0) * w,
+      };
       const sc = clearOf(c);
       if (sc > 0.04) return c;
       if (sc > bestScore) {

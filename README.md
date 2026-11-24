@@ -15,7 +15,7 @@ A mobile app (iOS and Android, built with Expo / React Native) for **learning an
 - **Intro** (first launch): three short steps. Welcome, which part you dance (leader, follower or both), and a one-minute interactive lesson on reading the footprints. The lesson can be opened again from the library.
 - **Library**: four starter routines of beginner figures (Slow Waltz: box and left box turn; Cha-cha: basic and New Yorker; Salsa On1: basic, side basic and the follower's right turn; Bachata: side basic and the follower's inside turn) and your own dances, with search and style filters.
 - **Player**
-  - *Animate*: the feet glide on the beat. The foot carrying your weight is solid, the free foot is light, and the moving foot has a thick numbered arrow and a dashed outline where it will land. Taps and holds look different from a normal step; a turning foot is simply drawn turned.
+  - *Animate*: the feet glide on the beat. The foot carrying your weight is solid, the free foot is light, and the moving foot has a thick numbered arrow and a dashed outline where it will land. Taps and holds look different from a normal step; when a foot turns on its way, it is drawn turned and its arrow curves the same way.
   - Big count, a plain-language description ("Right foot steps back"), beat pills to jump to any step, and previous / next to walk through one step at a time.
   - *Chart*: the printed view with every position numbered, one chart per bar (short dances of up to three bars can also show all steps at once).
   - Leader, Follower or **Both** side by side, in sync.
