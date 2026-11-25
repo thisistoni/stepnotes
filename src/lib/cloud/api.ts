@@ -6,7 +6,8 @@
  * Values that come back from the cloud (`dance`, `data`) are untrusted: run a dance through
  * `parseDance` before it is shown or stored.
  */
-export interface CloudUser { id: string; email: string }
+/** `name`: the first name the sign-in provider knows (Google), to suggest as the display name */
+export interface CloudUser { id: string; email: string; name?: string }
 export interface Profile { displayName: string }
 export interface Author { id: string; name: string }
 export type LibraryKind = 'dance' | 'collection';
@@ -27,6 +28,7 @@ export interface CloudApi {
   sendCode(email: string): Promise<void>;
   verifyCode(email: string, code: string): Promise<CloudUser>;
   signInWithApple(identityToken: string): Promise<CloudUser>;       // iOS: the token from Apple's sign-in sheet
+  signInWithGoogle(): Promise<CloudUser | null>;                    // null = closed without signing in (web: the page leaves for Google)
   signOut(): Promise<void>;
   deleteAccount(): Promise<void>;
   getProfile(): Promise<Profile | null>;

@@ -3,8 +3,9 @@ import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, TextInput, View, type TextStyle } from 'react-native';
 
 import { AppleSignIn } from '@/components/account/AppleSignIn';
+import { GoogleMark } from '@/components/account/GoogleMark';
 import { Button, goBackOrHome, Header, Icon, Screen, Text, TextField, useToast } from '@/components/ui';
-import { cloudErrorText, CloudError, isTransient } from '@/lib/cloud';
+import { cloudErrorText, CloudError, EMAIL_SIGN_IN, isTransient } from '@/lib/cloud';
 import { NAME_MAX, useAuth } from '@/lib/cloud/auth';
 import { useT } from '@/lib/i18n';
 import { colors, fonts, layout, lip, radius, space } from '@/lib/theme';
@@ -17,23 +18,27 @@ const WEB_NO_OUTLINE = Platform.OS === 'web' ? ({ outlineStyle: 'none', outlineW
 type Step = 'email' | 'code' | 'name';
 
 /**
- * Sign in (modal): e-mail → 6-digit code (or, on iOS, Sign in with Apple) → display name (when the account has none) → back to
+ * Sign in (modal): Apple (iOS) or Google → display name (when the account has none) → back to
  * where the user came from. No passwords. Opened by the Me tab and by `useRequireAccount()`.
  */
 export default function SignIn() {
   const t = useT();
   const toast = useToast();
-  const { signedIn, profile, sendCode, verifyCode, signInWithApple, saveProfile } = useAuth();
+  const { signedIn, user, profile, sendCode, verifyCode, signInWithApple, signInWithGoogle, saveProfile } = useAuth();
   const [step, setStep] = useState<Step>(signedIn ? 'name' : 'email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [name, setName] = useState('');
+  /** null = not typed yet: the field then shows the first name the provider shared, if any */
+  const [name, setName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sentAt, setSentAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const codeRef = useRef<ComponentRef<typeof TextInput>>(null);
   const done = useRef(false);
+  // already signed in while the first step would show (the web page came back from Google): the name is next
+  const at: Step = step === 'email' && signedIn && !busy ? 'name' : step;
+  const nameValue = name ?? user?.name?.slice(0, NAME_MAX) ?? '';
 
   const finish = (displayName: string) => {
     if (done.current) return;
@@ -44,11 +49,11 @@ export default function SignIn() {
 
   // opened while already signed in with a name (e.g. a stale requireAccount): nothing to do
   useEffect(() => {
-    if (step === 'name' && profile?.displayName && !done.current) {
+    if (at === 'name' && profile?.displayName && !done.current) {
       done.current = true;
       goBackOrHome();
     }
-  }, [step, profile]);
+  }, [at, profile]);
 
   // resend countdown
   const left = Math.max(0, RESEND_AFTER_S - Math.floor((now - sentAt) / 1000));
@@ -97,8 +102,27 @@ export default function SignIn() {
     }
   };
 
-  const appleFailed = (err?: unknown) =>
-    toast.show({ message: (tr) => (err && isTransient(err) ? cloudErrorText(err, tr) : tr.account.appleFailed), icon: 'alert' });
+  const providerFailed = (which: 'apple' | 'google', err?: unknown) =>
+    toast.show({
+      message: (tr) => (err && isTransient(err) ? cloudErrorText(err, tr) : which === 'apple' ? tr.account.appleFailed : tr.account.googleFailed),
+      icon: 'alert',
+    });
+  const appleFailed = (err?: unknown) => providerFailed('apple', err);
+  const onGoogle = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await signInWithGoogle();
+      if (!r) return; // closed, or (web) the page is on its way to Google
+      if (r.profile?.displayName) return finish(r.profile.displayName);
+      setStep('name');
+    } catch (err) {
+      providerFailed('google', err);
+    } finally {
+      setBusy(false);
+    }
+  };
   const onApple = async (identityToken: string, givenName: string | null) => {
     if (busy) return;
     setBusy(true);
@@ -125,7 +149,7 @@ export default function SignIn() {
   };
 
   const saveName = async () => {
-    const n = name.trim();
+    const n = nameValue.trim();
     if (!n) return setError(t.account.nameEmpty);
     setBusy(true);
     setError(null);
@@ -140,9 +164,9 @@ export default function SignIn() {
   };
 
   const footer =
-    step === 'email' ? (
+    at === 'email' && !EMAIL_SIGN_IN ? undefined : at === 'email' ? (
       <Button label={t.account.sendCode} onPress={() => void send()} loading={busy} iconRight="arrow-right" testID="send-code" />
-    ) : step === 'name' ? (
+    ) : at === 'name' ? (
       <Button label={t.account.continue} onPress={() => void saveName()} loading={busy} iconRight="arrow-right" testID="name-continue" />
     ) : undefined; // the code submits itself on the 6th digit
 
@@ -152,43 +176,65 @@ export default function SignIn() {
       footer={footer}
       testID="sign-in"
     >
-      {step === 'email' && (
+      {at === 'email' && (
         <View style={s.step} testID="step-email">
-          <StepArt icon="mail" />
+          <StepArt icon={EMAIL_SIGN_IN ? 'mail' : 'person'} />
           <Text variant="title" accessibilityRole="header">
-            {t.account.emailTitle}
+            {EMAIL_SIGN_IN ? t.account.emailTitle : t.account.startTitle}
           </Text>
           <Text variant="body" color="ink2" style={s.lead}>
-            {t.account.emailBody}
+            {EMAIL_SIGN_IN ? t.account.emailBody : t.account.startBody}
           </Text>
-          <TextField
-            label={t.account.emailLabel}
-            value={email}
-            onChangeText={(v) => {
-              setEmail(v);
-              setError(null);
-            }}
-            placeholder={t.account.emailPlaceholder}
-            inputMode="email"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-            textContentType="emailAddress"
-            returnKeyType="send"
-            onSubmitEditing={() => void send()}
-            autoFocus={Platform.OS === 'web'}
-            error={error}
-            icon="mail"
-            style={s.field}
-            testID="email-field"
-          />
-          <AppleSignIn onCredential={(token, givenName) => void onApple(token, givenName)} onError={() => appleFailed()} disabled={busy} />
+          {EMAIL_SIGN_IN && (
+            <>
+              <TextField
+                label={t.account.emailLabel}
+                value={email}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  setError(null);
+                }}
+                placeholder={t.account.emailPlaceholder}
+                inputMode="email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="send"
+                onSubmitEditing={() => void send()}
+                autoFocus={Platform.OS === 'web'}
+                error={error}
+                icon="mail"
+                style={s.field}
+                testID="email-field"
+              />
+              <View style={s.divider}>
+                <View style={s.line} />
+                <Text variant="caption" color="ink2">
+                  {t.account.or}
+                </Text>
+                <View style={s.line} />
+              </View>
+            </>
+          )}
+          <View style={[s.providers, !EMAIL_SIGN_IN && s.providersFirst]}>
+            <AppleSignIn onCredential={(token, givenName) => void onApple(token, givenName)} onError={() => appleFailed()} disabled={busy} />
+            <Button
+              label={t.account.google}
+              variant="secondary"
+              left={<GoogleMark size={20} />}
+              onPress={() => void onGoogle()}
+              disabled={busy && EMAIL_SIGN_IN}
+              loading={busy && !EMAIL_SIGN_IN}
+              testID="google-sign-in"
+            />
+          </View>
           <LegalLine />
         </View>
       )}
 
-      {step === 'code' && (
+      {at === 'code' && (
         <View style={s.step} testID="step-code">
           <StepArt icon="mail" />
           <Text variant="title" accessibilityRole="header">
@@ -267,7 +313,7 @@ export default function SignIn() {
         </View>
       )}
 
-      {step === 'name' && (
+      {at === 'name' && (
         <View style={s.step} testID="step-name">
           <StepArt icon="person" />
           <Text variant="title" accessibilityRole="header">
@@ -278,7 +324,7 @@ export default function SignIn() {
           </Text>
           <TextField
             label={t.account.nameLabel}
-            value={name}
+            value={nameValue}
             onChangeText={(v) => {
               setName(v);
               setError(null);
@@ -340,6 +386,10 @@ const s = StyleSheet.create({
   lead: { marginTop: space.s },
   field: { marginTop: space.xl },
   legal: { marginTop: space.xl },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: space.m, marginTop: space.xl },
+  line: { flex: 1, height: 2, borderRadius: 1, backgroundColor: colors.cardBorder },
+  providers: { gap: space.m, marginTop: space.l },
+  providersFirst: { marginTop: space.xl },
   link: { textDecorationLine: 'underline' },
   codeWrap: { marginTop: space.xl, alignSelf: 'stretch' },
   boxes: { flexDirection: 'row', justifyContent: 'space-between', gap: space.xs },

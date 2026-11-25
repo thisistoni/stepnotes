@@ -50,7 +50,8 @@
           "backgroundColor": "#FFF8F0"
         }
       ],
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-web-browser"
     ],
     "scheme": "waltzy",
     "owner": "thisistoni",

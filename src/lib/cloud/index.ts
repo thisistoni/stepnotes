@@ -16,7 +16,7 @@ import { CloudError, cloudErrorReason, type CloudApi } from './api';
 import { CLOUD_MODE } from './config';
 
 export * from './api';
-export { CLOUD_MODE, OPERATOR, WEB_ORIGIN } from './config';
+export { CLOUD_MODE, EMAIL_SIGN_IN, OPERATOR, WEB_ORIGIN } from './config';
 
 // require (not import): only the chosen implementation is evaluated, so a fake build never
 // creates a Supabase client.

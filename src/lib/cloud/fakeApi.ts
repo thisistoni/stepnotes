@@ -156,6 +156,21 @@ export const fakeApi: CloudApi = {
     return user;
   },
 
+  async signInWithGoogle() {
+    const user = await call((st) => {
+      const e = 'gina.google@gmail.com';
+      let u = st.users.find((x) => x.email === e);
+      if (!u) {
+        u = { id: `u-${rand(10)}`, email: e, displayName: null };
+        st.users.push(u);
+      }
+      return { id: u.id, email: u.email, name: 'Gina' };
+    }, true);
+    await AsyncStorage.setItem(FAKE_SESSION_KEY, user.id);
+    emit(user);
+    return user;
+  },
+
   async signOut() {
     await AsyncStorage.removeItem(FAKE_SESSION_KEY);
     emit(null);

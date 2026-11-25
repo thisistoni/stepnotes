@@ -9,17 +9,19 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, isAuthError, type SupabaseClient, type User } from '@supabase/supabase-js';
+import * as WebBrowser from 'expo-web-browser';
 import { AppState, Platform } from 'react-native';
 
 import { CloudError, type ClassDetail, type ClassPost, type ClassSummary, type CloudApi, type CloudUser, type LibraryItem, type MyShare, type SharedDance } from './api';
-import { SUPABASE_KEY, SUPABASE_URL } from './config';
+import { APP_SCHEME, SUPABASE_KEY, SUPABASE_URL } from './config';
 
 let client: SupabaseClient | null = null;
 
 function sb(): SupabaseClient {
   if (client) return client;
   client = createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+    // web: coming back from Google, the session is in the page address
+    auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: Platform.OS === 'web' },
   });
   if (Platform.OS !== 'web') {
     // Refresh the session only while the app is in the foreground (Supabase Expo guide).
@@ -77,7 +79,13 @@ async function run<T>(q: PromiseLike<{ data: T; error: PgError | null; status: n
   return res.data;
 }
 
-const toUser = (u: User | null | undefined): CloudUser | null => (u ? { id: u.id, email: u.email ?? '' } : null);
+/** The first name a provider (Google) shared, if any. */
+function givenName(u: User): string | undefined {
+  const m = (u.user_metadata ?? {}) as Record<string, unknown>;
+  const raw = [m.given_name, m.full_name, m.name].find((v) => typeof v === 'string' && v.trim()) as string | undefined;
+  return raw?.trim().split(/\s+/)[0] || undefined;
+}
+const toUser = (u: User | null | undefined): CloudUser | null => (u ? { id: u.id, email: u.email ?? '', name: givenName(u) } : null);
 
 /** The signed-in user from the stored session (no network), or a `notSignedIn` error. */
 async function requireUser(): Promise<CloudUser> {
@@ -187,6 +195,38 @@ export const supabaseApi: CloudApi = {
       if (error) throw error;
       const user = toUser(data.user);
       if (!user) throw new CloudError('unknown', 'no user after Apple sign-in');
+      return user;
+    } catch (e) {
+      throw authError(e);
+    }
+  },
+
+  async signInWithGoogle() {
+    try {
+      if (Platform.OS === 'web') {
+        // the page goes to Google and comes back to /sign-in, where the session is picked up
+        const { error } = await sb().auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/sign-in` } });
+        if (error) throw error;
+        return null;
+      }
+      // phone: Google's page in the system sign-in sheet, which hands the answer back to the app
+      const redirectTo = `${APP_SCHEME}://sign-in`;
+      const { data, error } = await sb().auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true } });
+      if (error) throw error;
+      if (!data.url) throw new CloudError('unknown', 'no sign-in address');
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type !== 'success') return null; // closed
+      const [, query = '', hash = ''] = /^[^?#]*\??([^#]*)#?(.*)$/.exec(result.url) ?? [];
+      const answer = new URLSearchParams(hash || query);
+      const access_token = answer.get('access_token');
+      const refresh_token = answer.get('refresh_token');
+      if (!access_token || !refresh_token) {
+        throw new CloudError('unknown', answer.get('error_description') ?? new URLSearchParams(query).get('error_description') ?? 'no session in the answer');
+      }
+      const { data: session, error: sessionError } = await sb().auth.setSession({ access_token, refresh_token });
+      if (sessionError) throw sessionError;
+      const user = toUser(session.user);
+      if (!user) throw new CloudError('unknown', 'no user after Google sign-in');
       return user;
     } catch (e) {
       throw authError(e);

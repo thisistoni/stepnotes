@@ -400,7 +400,7 @@ export const de: Strings = {
     asText: 'Lieber als Text teilen',
     asTextHint: 'Geht auch ohne Konto und ohne Internet',
     signInTitle: 'Melde dich an, um einen Link zu teilen',
-    signInBody: 'Ein Link gehört zu deinem Konto, damit du ihn später aktualisieren oder beenden kannst. Kein Passwort: Wir schicken dir einen Code per E-Mail.',
+    signInBody: 'Ein Link gehört zu deinem Konto, damit du ihn später aktualisieren oder beenden kannst. Melde dich mit Apple oder Google an – ohne neues Passwort.',
     signIn: 'Anmelden',
     checkFailed: 'Wir konnten nicht nachsehen, ob es für diesen Tanz schon einen Link gibt.',
     myLinks: 'Meine geteilten Links',
@@ -937,7 +937,7 @@ export const de: Strings = {
   account: {
     title: 'Profil',
     pitchTitle: 'Sichere deine Tänze und teile sie mit einem Link',
-    pitchBody: 'Melde dich mit deiner E-Mail-Adresse an. Ein Passwort brauchst du nicht: Wir schicken dir einen Code.',
+    pitchBody: 'Melde dich mit Apple oder Google an. Ein neues Passwort brauchst du nicht.',
     signIn: 'Anmelden',
     sectionAccount: 'Konto',
     sectionBackup: 'Sicherung',
@@ -965,7 +965,11 @@ export const de: Strings = {
     signInTitle: 'Anmelden',
     emailTitle: 'Wie lautet deine E-Mail-Adresse?',
     or: 'oder',
-    appleFailed: 'Die Anmeldung mit Apple hat nicht geklappt. Versuch es noch einmal oder nimm deine E-Mail-Adresse.',
+    appleFailed: 'Die Anmeldung mit Apple hat nicht geklappt. Versuch es bitte noch einmal.',
+    startTitle: 'Bei Waltzy anmelden',
+    startBody: 'Sichere deine Tänze und teile sie mit einem Link. Ein neues Passwort brauchst du nicht: Nimm ein Konto, das du schon hast.',
+    google: 'Mit Google anmelden',
+    googleFailed: 'Die Anmeldung mit Google hat nicht geklappt. Versuch es bitte noch einmal.',
     appleAccount: 'Mit Apple angemeldet',
     emailBody: 'Wir schicken dir einen 6-stelligen Code. Ein Passwort brauchst du nicht.',
     emailLabel: 'E-Mail-Adresse',
@@ -1019,7 +1023,7 @@ export const de: Strings = {
         },
         {
           heading: 'Dein Konto',
-          body: 'Du meldest dich mit deiner E-Mail-Adresse und einem Einmal-Code an oder auf dem iPhone mit Apple. Dein Name ist bei Tänzen zu sehen, die du teilst, und bei Kursen, die du leitest. Pass gut auf dein E-Mail-Postfach auf: Wer es lesen kann, kann sich als du anmelden.',
+          body: 'Du meldest dich mit deinem Apple- oder Google-Konto an. Dein Name ist bei Tänzen zu sehen, die du teilst, und bei Kursen, die du leitest. Pass gut auf dieses Konto auf: Wer es benutzen kann, kann sich als du anmelden.',
         },
         {
           heading: 'Was du teilst',
@@ -1048,11 +1052,11 @@ export const de: Strings = {
         },
         {
           heading: 'Was wir speichern',
-          body: 'Deine E-Mail-Adresse (für die Anmeldung; bei Apple kann es die Weiterleitungsadresse sein, die Apple uns stattdessen gibt), deinen Namen, die Tänze, die du sicherst, die Tänze, die du mit einem Link teilst, die Kurse, die du leitest oder besuchst, samt ihren Beiträgen, und Meldungen, die du schickst.',
+          body: 'Die E-Mail-Adresse des Apple- oder Google-Kontos, mit dem du dich anmeldest (bei Apple kann es eine Weiterleitungsadresse sein, die Apple uns stattdessen gibt), deinen Namen, die Tänze, die du sicherst, die Tänze, die du mit einem Link teilst, die Kurse, die du leitest oder besuchst, samt ihren Beiträgen, und Meldungen, die du schickst.',
         },
         {
           heading: 'Wo',
-          body: 'Bei unserem Hosting-Anbieter Supabase, auf Servern in der EU (Frankfurt, Deutschland). Anmelde-Codes werden per E-Mail verschickt. Wenn du dich mit Apple anmeldest, bestätigt uns Apple, dass du es bist. Die Webseite, die geteilte Links öffnet, läuft auf unserem eigenen Server und wird über Cloudflare ausgeliefert.',
+          body: 'Bei unserem Hosting-Anbieter Supabase, auf Servern in der EU (Frankfurt, Deutschland). Bei der Anmeldung bestätigt uns Apple oder Google, dass du es bist; dein Passwort sehen wir nie. Die Webseite, die geteilte Links öffnet, läuft auf unserem eigenen Server und wird über Cloudflare ausgeliefert.',
         },
         {
           heading: 'Wer es sieht',

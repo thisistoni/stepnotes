@@ -36,6 +36,8 @@ export interface Auth {
   verifyCode: (email: string, code: string) => Promise<Profile | null>;
   /** iOS: signs in with the token from Apple's sheet; resolves like `verifyCode`. */
   signInWithApple: (identityToken: string) => Promise<Profile | null>;
+  /** Google. `null` = closed without signing in (on the web the page leaves and comes back signed in). */
+  signInWithGoogle: () => Promise<{ profile: Profile | null; suggestedName: string | null } | null>;
   saveProfile: (displayName: string) => Promise<Profile>;
   /** Signs out on this device only. Dances stay on the device. */
   signOut: () => Promise<void>;
@@ -131,6 +133,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadProfile],
   );
 
+  const signInWithGoogle = useCallback(async () => {
+    const u = await cloud.signInWithGoogle();
+    if (!u) return null;
+    userRef.current = u;
+    setUser(u);
+    setProfile(null);
+    return { profile: await loadProfile(u), suggestedName: u.name ?? null };
+  }, [loadProfile]);
+
   const saveProfile = useCallback(async (displayName: string) => {
     const u = userRef.current;
     if (!u) throw new CloudError('notSignedIn');
@@ -158,8 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Auth>(
-    () => ({ ready, user, profile, signedIn: !!user, sendCode, verifyCode, signInWithApple, saveProfile, signOut, deleteAccount }),
-    [ready, user, profile, sendCode, verifyCode, signInWithApple, saveProfile, signOut, deleteAccount],
+    () => ({ ready, user, profile, signedIn: !!user, sendCode, verifyCode, signInWithApple, signInWithGoogle, saveProfile, signOut, deleteAccount }),
+    [ready, user, profile, sendCode, verifyCode, signInWithApple, signInWithGoogle, saveProfile, signOut, deleteAccount],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

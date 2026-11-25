@@ -10,6 +10,13 @@ export const SUPABASE_KEY = 'sb_publishable_8ZYEo9TfuBqhY79e8mf4bg_TeO9Vb1m';
 /** `EXPO_PUBLIC_CLOUD=fake` builds talk to the in-memory fake instead of Supabase (QA). */
 export const CLOUD_MODE: 'fake' | 'supabase' = process.env.EXPO_PUBLIC_CLOUD === 'fake' ? 'fake' : 'supabase';
 
+/**
+ * People sign in with Apple (iOS) or Google. The e-mail code is built but switched off: it needs a
+ * mail service on the backend. QA builds (fake cloud) keep it, so the flow stays tested; set
+ * EXPO_PUBLIC_EMAIL_SIGN_IN=1 to offer it in a real build once a mail service exists.
+ */
+export const EMAIL_SIGN_IN = CLOUD_MODE === 'fake' || process.env.EXPO_PUBLIC_EMAIL_SIGN_IN === '1';
+
 /** Origin of the web app, for links people share (`${WEB_ORIGIN}/s/<id>`, `${WEB_ORIGIN}/c/<code>`). */
 export const WEB_ORIGIN: string =
   Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin

@@ -371,7 +371,7 @@ export const en = {
     asText: 'Share as text instead',
     asTextHint: 'Works without an account or internet',
     signInTitle: 'Sign in to share a link',
-    signInBody: 'A link belongs to your account, so you can update it or stop it later. No password: we send you a code by e-mail.',
+    signInBody: 'A link belongs to your account, so you can update it or stop it later. Sign in with Apple or Google, no new password.',
     signIn: 'Sign in',
     checkFailed: 'Could not check whether this dance has a link yet.',
     // My shared links (Profile)
@@ -921,7 +921,7 @@ export const en = {
   account: {
     title: 'Profile',
     pitchTitle: 'Back up your dances and share them with a link',
-    pitchBody: 'Sign in with your e-mail. There is no password: we send you a code.',
+    pitchBody: 'Sign in with Apple or Google. No new password to remember.',
     signIn: 'Sign in',
     sectionAccount: 'Account',
     sectionBackup: 'Backup',
@@ -951,7 +951,12 @@ export const en = {
     emailTitle: 'What’s your e-mail?',
     /** between the e-mail field and Apple's button */
     or: 'or',
-    appleFailed: 'Sign in with Apple didn’t work. Try again, or use your e-mail.',
+    appleFailed: 'Sign in with Apple didn’t work. Please try again.',
+    /** sign-in screen without the e-mail code */
+    startTitle: 'Sign in to Waltzy',
+    startBody: 'Back up your dances and share them with a link. No new password: use an account you already have.',
+    google: 'Sign in with Google',
+    googleFailed: 'Sign in with Google didn’t work. Please try again.',
     /** shown instead of Apple's hidden relay address */
     appleAccount: 'Signed in with Apple',
     emailBody: 'We’ll send you a 6-digit code. No password needed.',
@@ -1009,7 +1014,7 @@ export const en = {
         },
         {
           heading: 'Your account',
-          body: 'You sign in with your e-mail and a one-time code, or on an iPhone with Apple. Your display name is shown on dances you share and classes you run. Keep your e-mail account safe: whoever can read it can sign in as you.',
+          body: 'You sign in with your Apple or Google account. Your display name is shown on dances you share and classes you run. Keep that account safe: whoever can use it can sign in as you.',
         },
         {
           heading: 'What you share',
@@ -1038,11 +1043,11 @@ export const en = {
         },
         {
           heading: 'What we store',
-          body: 'Your e-mail address (to sign you in; with Apple it can be the relay address Apple gives us instead), your display name, the dances you back up, the dances you share with a link, the classes you run or join and what is posted in them, and reports you send.',
+          body: 'The e-mail address of the Apple or Google account you sign in with (with Apple it can be a relay address Apple gives us instead), your display name, the dances you back up, the dances you share with a link, the classes you run or join and what is posted in them, and reports you send.',
         },
         {
           heading: 'Where',
-          body: 'With our hosting provider Supabase, on servers in the EU (Frankfurt, Germany). Sign-in codes are sent by e-mail. If you sign in with Apple, Apple confirms to us that it is you. The web page that opens shared links runs on our own server and is delivered through Cloudflare.',
+          body: 'With our hosting provider Supabase, on servers in the EU (Frankfurt, Germany). When you sign in, Apple or Google confirms to us that it is you; we never see your password. The web page that opens shared links runs on our own server and is delivered through Cloudflare.',
         },
         {
           heading: 'Who can see it',

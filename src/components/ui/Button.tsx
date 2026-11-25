@@ -20,6 +20,8 @@ export interface ButtonProps {
   /** Colour family for primary / tinted (default green). E.g. `TONE.follower`, `styleColor(s)`. */
   tone?: ColorSet;
   icon?: IconName;
+  /** A custom element in place of `icon` (e.g. a brand mark that must keep its own colours) */
+  left?: ReactNode;
   iconRight?: IconName;
   loading?: boolean;
   disabled?: boolean;
@@ -63,6 +65,7 @@ export function Button({
   size = 'lg',
   tone = TONE.primary,
   icon,
+  left,
   iconRight,
   loading,
   disabled,
@@ -96,7 +99,7 @@ export function Button({
       faceStyle={[s.face, { height: sz.h, paddingHorizontal: ghost ? 12 : sz.px }]}
     >
       <View style={[s.row, loading && s.hidden]}>
-        {icon && <Icon name={icon} size={sz.icon} color={fg} strokeWidth={2.5} />}
+        {left ?? (icon && <Icon name={icon} size={sz.icon} color={fg} strokeWidth={2.5} />)}
         <Text
           numberOfLines={1}
           variant="heading"
