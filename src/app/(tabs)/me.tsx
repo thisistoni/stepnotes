@@ -95,7 +95,7 @@ export default function Me() {
                       {name || t.account.noName}
                     </Text>
                     <Text variant="small" color="ink2" numberOfLines={1} testID="me-email">
-                      {user.email}
+                      {!user.email || user.email.endsWith('@privaterelay.appleid.com') ? t.account.appleAccount : user.email}
                     </Text>
                   </View>
                   <IconButton icon="pencil" label={t.account.editName} onPress={() => setNameOpen(true)} testID="me-edit-name" />

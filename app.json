@@ -20,7 +20,8 @@
           "de"
         ],
         "CFBundleDevelopmentRegion": "en"
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -48,7 +49,8 @@
           "imageWidth": 200,
           "backgroundColor": "#FFF8F0"
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "scheme": "waltzy",
     "owner": "thisistoni",

@@ -1,7 +1,7 @@
 /**
  * Accounts: e-mail + 6-digit code, a display name, sign out, delete.
  *
- *   const { ready, user, profile, signedIn, sendCode, verifyCode, saveProfile, signOut, deleteAccount } = useAuth();
+ *   const { ready, user, profile, signedIn, sendCode, verifyCode, signInWithApple, saveProfile, signOut, deleteAccount } = useAuth();
  *   const requireAccount = useRequireAccount();
  *   if (!requireAccount()) return;   // opened the sign-in screen; try again when the user is back
  *
@@ -34,6 +34,8 @@ export interface Auth {
   sendCode: (email: string) => Promise<void>;
   /** Signs in; resolves with the profile (null when the user still has to pick a name). */
   verifyCode: (email: string, code: string) => Promise<Profile | null>;
+  /** iOS: signs in with the token from Apple's sheet; resolves like `verifyCode`. */
+  signInWithApple: (identityToken: string) => Promise<Profile | null>;
   saveProfile: (displayName: string) => Promise<Profile>;
   /** Signs out on this device only. Dances stay on the device. */
   signOut: () => Promise<void>;
@@ -118,6 +120,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadProfile],
   );
 
+  const signInWithApple = useCallback(
+    async (identityToken: string) => {
+      const u = await cloud.signInWithApple(identityToken);
+      userRef.current = u;
+      setUser(u);
+      setProfile(null);
+      return loadProfile(u);
+    },
+    [loadProfile],
+  );
+
   const saveProfile = useCallback(async (displayName: string) => {
     const u = userRef.current;
     if (!u) throw new CloudError('notSignedIn');
@@ -145,8 +158,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Auth>(
-    () => ({ ready, user, profile, signedIn: !!user, sendCode, verifyCode, saveProfile, signOut, deleteAccount }),
-    [ready, user, profile, sendCode, verifyCode, saveProfile, signOut, deleteAccount],
+    () => ({ ready, user, profile, signedIn: !!user, sendCode, verifyCode, signInWithApple, saveProfile, signOut, deleteAccount }),
+    [ready, user, profile, sendCode, verifyCode, signInWithApple, saveProfile, signOut, deleteAccount],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -107,6 +107,7 @@ src/lib/cloud/
   DanceSync.tsx   registers the user's dances with the engine
 ```
 
+- **Sign-in**: a 6-digit code by e-mail everywhere, plus Sign in with Apple on iOS (`src/components/account/AppleSignIn.ios.tsx`; other platforms get the empty `AppleSignIn.tsx`). In the Supabase dashboard this needs: the Magic Link and Confirm signup e-mail templates showing `{{ .Token }}`, a mail service (SMTP) for anyone but the project owner, and the Apple provider enabled with the bundle id as client id.
 - **Screens never import Supabase**: everything goes through `cloud`. Every method rejects with a `CloudError`; show `cloudErrorText(e, t)`.
 - **Untrusted data**: `dance` / `data` from the cloud always goes through `parseDance` before it is shown or stored.
 - **Sync**: last writer wins per item on `updatedAt` (client ms), same rule as the database function `push_library_items`. Deletions are explicit: `DanceProvider.remove` / `restore` call `emitRemoved` / `emitRestored` (`src/lib/libraryEvents.ts`); an item that is merely missing locally never deletes the cloud copy. Built-in starter dances are never synced. Signing in as another person on the same device merges the local dances into that account.

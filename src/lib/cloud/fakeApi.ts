@@ -140,6 +140,22 @@ export const fakeApi: CloudApi = {
     return user;
   },
 
+  async signInWithApple(identityToken) {
+    // one fake Apple account per token; Apple hides the real address behind a relay address
+    const user = await call((st) => {
+      const e = `${identityToken.slice(0, 12).toLowerCase() || 'apple'}@privaterelay.appleid.com`;
+      let u = st.users.find((x) => x.email === e);
+      if (!u) {
+        u = { id: `u-${rand(10)}`, email: e, displayName: null };
+        st.users.push(u);
+      }
+      return { id: u.id, email: u.email };
+    }, true);
+    await AsyncStorage.setItem(FAKE_SESSION_KEY, user.id);
+    emit(user);
+    return user;
+  },
+
   async signOut() {
     await AsyncStorage.removeItem(FAKE_SESSION_KEY);
     emit(null);

@@ -181,6 +181,18 @@ export const supabaseApi: CloudApi = {
     }
   },
 
+  async signInWithApple(identityToken) {
+    try {
+      const { data, error } = await sb().auth.signInWithIdToken({ provider: 'apple', token: identityToken });
+      if (error) throw error;
+      const user = toUser(data.user);
+      if (!user) throw new CloudError('unknown', 'no user after Apple sign-in');
+      return user;
+    } catch (e) {
+      throw authError(e);
+    }
+  },
+
   async signOut() {
     try {
       // this device only: other devices stay signed in

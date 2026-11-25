@@ -26,6 +26,7 @@ export interface CloudApi {
   onAuthChange(cb: (user: CloudUser | null) => void): () => void;
   sendCode(email: string): Promise<void>;
   verifyCode(email: string, code: string): Promise<CloudUser>;
+  signInWithApple(identityToken: string): Promise<CloudUser>;       // iOS: the token from Apple's sign-in sheet
   signOut(): Promise<void>;
   deleteAccount(): Promise<void>;
   getProfile(): Promise<Profile | null>;

@@ -2,8 +2,9 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, TextInput, View, type TextStyle } from 'react-native';
 
+import { AppleSignIn } from '@/components/account/AppleSignIn';
 import { Button, goBackOrHome, Header, Icon, Screen, Text, TextField, useToast } from '@/components/ui';
-import { cloudErrorText, CloudError } from '@/lib/cloud';
+import { cloudErrorText, CloudError, isTransient } from '@/lib/cloud';
 import { NAME_MAX, useAuth } from '@/lib/cloud/auth';
 import { useT } from '@/lib/i18n';
 import { colors, fonts, layout, lip, radius, space } from '@/lib/theme';
@@ -16,13 +17,13 @@ const WEB_NO_OUTLINE = Platform.OS === 'web' ? ({ outlineStyle: 'none', outlineW
 type Step = 'email' | 'code' | 'name';
 
 /**
- * Sign in (modal): e-mail → 6-digit code → display name (when the account has none) → back to
+ * Sign in (modal): e-mail → 6-digit code (or, on iOS, Sign in with Apple) → display name (when the account has none) → back to
  * where the user came from. No passwords. Opened by the Me tab and by `useRequireAccount()`.
  */
 export default function SignIn() {
   const t = useT();
   const toast = useToast();
-  const { signedIn, profile, sendCode, verifyCode, saveProfile } = useAuth();
+  const { signedIn, profile, sendCode, verifyCode, signInWithApple, saveProfile } = useAuth();
   const [step, setStep] = useState<Step>(signedIn ? 'name' : 'email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -96,6 +97,25 @@ export default function SignIn() {
     }
   };
 
+  const appleFailed = (err?: unknown) =>
+    toast.show({ message: (tr) => (err && isTransient(err) ? cloudErrorText(err, tr) : tr.account.appleFailed), icon: 'alert' });
+  const onApple = async (identityToken: string, givenName: string | null) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const p = await signInWithApple(identityToken);
+      if (p?.displayName) return finish(p.displayName);
+      // Apple shares the first name once, on the very first sign-in: offer it as the display name
+      if (givenName) setName(givenName.slice(0, NAME_MAX));
+      setStep('name');
+    } catch (err) {
+      appleFailed(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onCode = (text: string) => {
     // paste-friendly: keep the digits of whatever was typed or pasted ("Your code: 123 456")
     const digits = text.replace(/\D/g, '').slice(0, CODE_LENGTH);
@@ -163,6 +183,7 @@ export default function SignIn() {
             style={s.field}
             testID="email-field"
           />
+          <AppleSignIn onCredential={(token, givenName) => void onApple(token, givenName)} onError={() => appleFailed()} disabled={busy} />
           <LegalLine />
         </View>
       )}

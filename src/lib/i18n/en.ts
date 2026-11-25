@@ -949,6 +949,11 @@ export const en = {
     // sign-in screen
     signInTitle: 'Sign in',
     emailTitle: 'What’s your e-mail?',
+    /** between the e-mail field and Apple's button */
+    or: 'or',
+    appleFailed: 'Sign in with Apple didn’t work. Try again, or use your e-mail.',
+    /** shown instead of Apple's hidden relay address */
+    appleAccount: 'Signed in with Apple',
     emailBody: 'We’ll send you a 6-digit code. No password needed.',
     emailLabel: 'E-mail',
     emailPlaceholder: 'you@example.com',
