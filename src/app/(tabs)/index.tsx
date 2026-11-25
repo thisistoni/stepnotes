@@ -3,7 +3,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DanceGrid, DanceGridSkeleton } from '@/components/library/DanceGrid';
-import { LanguageSheet } from '@/components/library/LanguageSheet';
 import { LessonCard } from '@/components/library/LessonCard';
 import { MyDancesEmpty } from '@/components/library/MyDancesEmpty';
 import { NoMatches } from '@/components/library/NoMatches';
@@ -18,7 +17,6 @@ import { space } from '@/lib/theme';
 export default function Library() {
   const { dances, custom, ready } = useDances();
   const t = useT();
-  const [languageOpen, setLanguageOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [styleKey, setStyleKey] = useState<string | null>(null);
 
@@ -47,12 +45,7 @@ export default function Library() {
         large
         eyebrow="Waltzy"
         title={t.library.title}
-        right={
-          <>
-            <IconButton icon="globe" label={t.language.button} onPress={() => setLanguageOpen(true)} testID="language-button" />
-            <IconButton icon="import" label={t.library.import} onPress={() => router.push('/import')} testID="import-button" />
-          </>
-        }
+        right={<IconButton icon="import" label={t.library.import} onPress={() => router.push('/import')} testID="import-button" />}
       />
       <Entrance index={0} style={s.px}>
         <SearchField
@@ -107,7 +100,6 @@ export default function Library() {
           <LessonCard onPress={() => router.push('/intro?lesson=1')} />
         </Entrance>
       </View>
-      <LanguageSheet visible={languageOpen} onClose={() => setLanguageOpen(false)} />
     </Screen>
   );
 }

@@ -23,8 +23,9 @@ A mobile app (iOS and Android, built with Expo / React Native) for **learning an
   - Duplicate, share as text, delete (with undo).
 - **Editor**: drag the feet on a grid, press and hold a foot to turn it (the toes follow your finger, in 15° steps; the ±15° buttons do the same), drag the empty floor to move the view (the crosshair shows everything again), and set each step's count, length (½ / 1 / 2 beats), foot, action (step, tap, hold) and a note. Generate the follower part as a mirror of the leader, then adjust it. Undo for every change. "Make my own version" of a starter dance opens the editor on a copy that is only saved when you press Save.
 - **Import**: paste a dance someone shared (extra chat text around it is fine).
-- Everything is stored on the device. There are no accounts and no server.
-- **Languages**: German (the default for now) and English. Switch with the globe button in the library header, or with DE | EN on the first intro screen. The choice is saved with the other settings.
+- **Tabs**: Library · Classes · Me. Player, editor, import, sign-in and the legal pages open above the tabs.
+- **Account (optional)**: everything works on the device without one. Signing in (e-mail + 6-digit code, no password) backs your dances up and brings them to your other devices. The Me tab shows the backup status, lets you change your name, sign out (dances stay) and delete the account. Classes is a placeholder for now.
+- **Languages**: German and English. The app follows the device language (German if the device is set to German, otherwise English) until you pick one under Me → Language or with DE | EN on the first intro screen; that choice is saved with the other settings.
 
 ## Run it
 
@@ -50,7 +51,9 @@ src/
   app/                    screens (Expo Router)
     _layout.tsx           providers, fonts, splash screen, first-run redirect
     intro.tsx             intro; /intro?lesson=1 shows only the lesson
-    index.tsx             library
+    (tabs)/_layout.tsx    tab bar: Library (index.tsx, "/"), Classes (classes.tsx), Me (me.tsx)
+    sign-in.tsx           e-mail → code → name (modal)
+    legal/                terms.tsx, privacy.tsx
     dance/[id].tsx        player
     edit/[id].tsx         editor ("new" creates a dance, ?from=<id> copies one)
     import.tsx            paste a shared dance
@@ -58,7 +61,8 @@ src/
     ui/                   design system: Text, PressableLip, Button, Segmented, Sheet, Toast…
     StepDiagram.tsx       the SVG diagram: animation, chart and touch editing
     FootShape.tsx         shoe and heel footprints
-    library/ player/ editor/ intro/   parts of each screen
+    TabBar.tsx            the custom tab bar
+    library/ player/ editor/ intro/ account/ legal/   parts of each screen
   lib/
     types.ts              data model
     pattern.ts            step maths: weight, interpolation, mirror, partner, descriptions
@@ -66,11 +70,44 @@ src/
     usePlayback.ts        beat clock (runs on the UI thread)
     useDanceDraft.ts      editor state with undo
     store.tsx, prefs.tsx  saved dances and settings (AsyncStorage)
+    cloud/                backend seam, accounts, library sync (see Backend)
+    libraryEvents.ts      explicit delete / undo events for the sync
     validate.ts           checks imported and stored dances
     i18n/                 German and English texts, useT(), plurals
     builtins.ts           starter dances
     theme.ts              colours, type, spacing
 ```
+
+## Backend
+
+Optional accounts and the library backup run on Supabase (EU, Frankfurt). The app is local-first: AsyncStorage is the source of truth for the UI, the cloud is a backup that merges between devices.
+
+```
+src/lib/cloud/
+  api.ts          CloudApi interface + CloudError (reason: offline | notSignedIn | invalidCode | rateLimited | limit | notFound | unknown)
+  config.ts       Supabase URL + publishable key, WEB_ORIGIN, OPERATOR (who runs the app, for the legal pages)
+  supabaseApi.ts  the real implementation (the only file that imports @supabase/supabase-js; client created on first use)
+  fakeApi.ts      the same behaviour in AsyncStorage (`waltzy.fakecloud.v1`) for QA builds; code 123456
+  index.ts        `cloud` (fake when EXPO_PUBLIC_CLOUD=fake), `cloudErrorText(e, t)`
+  auth.tsx        AuthProvider, useAuth(), useRequireAccount()
+  sync.tsx        SyncProvider, useSync(), useSyncSource() (when to sync, I/O)
+  merge.ts        the pure last-writer-wins decision (tested with a node script)
+  syncMemory.ts   sync state on the device (`waltzy.sync.v1`)
+  DanceSync.tsx   registers the user's dances with the engine
+```
+
+- **Screens never import Supabase**: everything goes through `cloud`. Every method rejects with a `CloudError`; show `cloudErrorText(e, t)`.
+- **Untrusted data**: `dance` / `data` from the cloud always goes through `parseDance` before it is shown or stored.
+- **Sync**: last writer wins per item on `updatedAt` (client ms), same rule as the database function `push_library_items`. Deletions are explicit: `DanceProvider.remove` / `restore` call `emitRemoved` / `emitRestored` (`src/lib/libraryEvents.ts`); an item that is merely missing locally never deletes the cloud copy. Built-in starter dances are never synced. Signing in as another person on the same device merges the local dances into that account.
+- **Credit** (`Dance.source`): kept in storage and in the backup, never in a JSON export, and dropped from pasted text on import (so it cannot be made up).
+- **Build with the fake** (all QA runs against it, the container cannot reach supabase.co):
+
+  ```bash
+  EXPO_PUBLIC_CLOUD=fake npx expo export --platform web --output-dir dist-fake
+  ```
+
+  Sign in with any e-mail and the code `123456` (`000000` is a wrong code). One browser profile can play several devices: wipe the `waltzy.*` keys except `waltzy.fakecloud.v1`. `window.__fakeCloud.setOffline(true)` makes every call fail with `offline`.
+- **Links** (used by sharing and classes): `https://<web origin>/s/<shareId>` (a shared dance), `https://<web origin>/c/<classCode>` (a class); inside the app `waltzy://s/<shareId>`, `waltzy://c/<classCode>`. `WEB_ORIGIN` is the page's origin on web, else `EXPO_PUBLIC_WEB_ORIGIN` or `https://waltzy.expo.app`.
 
 ## Languages
 

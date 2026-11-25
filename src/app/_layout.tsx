@@ -16,6 +16,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ErrorScreen } from '@/components/ErrorScreen';
 import { ConfirmHost, ToastHost } from '@/components/ui';
+import { AuthProvider } from '@/lib/cloud/auth';
+import { DanceSync } from '@/lib/cloud/DanceSync';
+import { SyncProvider } from '@/lib/cloud/sync';
 import { I18nProvider } from '@/lib/i18n';
 import { PrefsProvider, usePrefs } from '@/lib/prefs';
 import { DanceProvider, useDances } from '@/lib/store';
@@ -52,12 +55,18 @@ export default function RootLayout() {
         {/* the language comes from prefs, which are loaded before anything renders (no flash) */}
         <I18nProvider>
           <DanceProvider>
-            <ToastHost>
-              <ConfirmHost>
-                <StatusBar style="dark" />
-                <AppStack fontsReady={fontsLoaded || !!fontError} />
-              </ConfirmHost>
-            </ToastHost>
+            {/* accounts and the library backup (local-first: the app works without them) */}
+            <AuthProvider>
+              <SyncProvider>
+                <DanceSync />
+                <ToastHost>
+                  <ConfirmHost>
+                    <StatusBar style="dark" />
+                    <AppStack fontsReady={fontsLoaded || !!fontError} />
+                  </ConfirmHost>
+                </ToastHost>
+              </SyncProvider>
+            </AuthProvider>
           </DanceProvider>
         </I18nProvider>
       </PrefsProvider>
@@ -94,10 +103,14 @@ function AppStack({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="intro" options={{ animation: 'fade' }} />
           {/* Until the intro is done every other route redirects to it. */}
           <Stack.Protected guard={prefs.onboardingDone}>
-            <Stack.Screen name="index" />
+            {/* Library · Classes · Me (the tab bar); everything below opens above it */}
+            <Stack.Screen name="(tabs)" />
             <Stack.Screen name="dance/[id]" />
             <Stack.Screen name="edit/[id]" />
             <Stack.Screen name="import" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="sign-in" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="legal/terms" />
+            <Stack.Screen name="legal/privacy" />
           </Stack.Protected>
         </Stack>
       ) : (

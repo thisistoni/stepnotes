@@ -66,7 +66,7 @@ export function Card({
     );
   }
   return (
-    <LipSurface colors={colors} radius={r} lipDepth={lipDepth} style={style} faceStyle={[{ padding }, contentStyle]}>
+    <LipSurface colors={colors} radius={r} lipDepth={lipDepth} style={style} faceStyle={[{ padding }, contentStyle]} testID={testID}>
       {children}
     </LipSurface>
   );

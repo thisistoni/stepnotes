@@ -101,7 +101,7 @@ export const en = {
   },
 
   language: {
-    /** The globe button in the library */
+    /** The language row on the Me tab */
     button: 'Language',
   },
 
@@ -626,6 +626,173 @@ export const en = {
       },
     },
   } satisfies Record<StarterId, StarterText> as Record<StarterId, StarterText>,
+
+  /** Bottom tab bar */
+  tabs: {
+    library: 'Library',
+    classes: 'Classes',
+    me: 'Me',
+    /** Classes tab until classes exist */
+    classesTitle: 'Classes',
+    classesSoonTitle: 'Learn with your dance class',
+    classesSoonBody: 'Soon your teacher can post the steps of each lesson here, and you join with a link.',
+  },
+
+  /** Signing in, the Me tab, account deletion */
+  account: {
+    title: 'Me',
+    pitchTitle: 'Back up your dances and share them with a link',
+    pitchBody: 'Sign in with your e-mail. There is no password: we send you a code.',
+    signIn: 'Sign in',
+    sectionAccount: 'Account',
+    sectionBackup: 'Backup',
+    sectionApp: 'App',
+    name: 'Name',
+    noName: 'No name yet',
+    editName: 'Change name',
+    email: 'E-mail',
+    language: 'Language',
+    lesson: 'How to read the footprints',
+    terms: 'Terms of use',
+    privacy: 'Privacy',
+    version: (v: string) => `Version ${v}`,
+    signOut: 'Sign out',
+    signOutTitle: 'Sign out?',
+    signOutMessage: 'Your dances stay on this device. Sign in again any time to back them up.',
+    signedOut: 'Signed out. Your dances are still here.',
+    deleteAccount: 'Delete account',
+    deleteHint: 'Deletes your backup, shared links and classes',
+    deleteTitle: 'Delete your account?',
+    deleteMessage:
+      'This deletes your account and everything stored with it: the backup of your dances, the links you shared and your classes. It cannot be undone. The dances on this device stay here.',
+    deleteConfirm: 'Delete my account',
+    deleted: 'Your account was deleted. Your dances are still on this device.',
+    // sign-in screen
+    signInTitle: 'Sign in',
+    emailTitle: 'What’s your e-mail?',
+    emailBody: 'We’ll send you a 6-digit code. No password needed.',
+    emailLabel: 'E-mail',
+    emailPlaceholder: 'you@example.com',
+    badEmail: 'That doesn’t look like an e-mail address. Check it and try again.',
+    sendCode: 'Send code',
+    codeTitle: 'Check your e-mail',
+    codeBody: (email: string) => `We sent a 6-digit code to ${email}. Type it in here.`,
+    codeLabel: '6-digit code',
+    codeHint: 'Can’t find it? Look in your spam folder.',
+    resendIn: (s: number) => `Send a new code in ${s} s`,
+    resend: 'Send a new code',
+    resent: 'New code sent',
+    otherEmail: 'Use another e-mail',
+    nameTitle: 'What’s your name?',
+    nameBody: 'This name is shown on dances you share.',
+    nameLabel: 'Your name',
+    namePlaceholder: 'First name or nickname',
+    nameEmpty: 'Type a name first.',
+    continue: 'Continue',
+    saveName: 'Save',
+    nameSaved: 'Name saved',
+    welcome: (name: string) => `Signed in as ${name}`,
+    /** {terms} and {privacy} become links */
+    legalLine: 'By continuing you agree to the {terms} and the {privacy}.',
+    legalTerms: 'terms of use',
+    legalPrivacy: 'privacy policy',
+  },
+
+  /** Library backup status (Me tab) */
+  sync: {
+    explain: 'Your dances are saved on this device and backed up to your account, so they also show up on your other devices.',
+    syncing: 'Backing up…',
+    never: 'Not backed up yet',
+    justNow: 'Backed up just now',
+    minutesAgo: (n: number) => `Backed up ${pl(n, { one: '# minute', other: '# minutes' })} ago`,
+    at: (when: string) => `Last backup: ${when}`,
+    error: 'Backup paused',
+    retryHint: 'We’ll try again by ourselves. Your dances are safe on this device.',
+    now: 'Back up now',
+  },
+
+  /** Terms of use and privacy policy (drafts: the owner reviews them) */
+  legal: {
+    updated: (date: string) => `Last updated: ${date}`,
+    operator: (name: string) => `Waltzy is run by ${name}.`,
+    contact: (email: string) => `Contact: ${email}`,
+    terms: {
+      title: 'Terms of use',
+      sections: [
+        {
+          heading: 'In short',
+          body: 'Waltzy works on your device without an account. These terms apply when you sign in: to back up your dances, share them with a link or run a class.',
+        },
+        {
+          heading: 'Your account',
+          body: 'You sign in with your e-mail and a one-time code. Your display name is shown on dances you share and classes you run. Keep your e-mail account safe: whoever can read it can sign in as you.',
+        },
+        {
+          heading: 'What you share',
+          body: 'A dance you share with a link can be seen and saved by anyone who has the link. A class can be seen by anyone with its link. Only share what you made yourself or are allowed to share.',
+        },
+        {
+          heading: 'No tolerance for objectionable content',
+          body: 'Do not share anything offensive, hateful, sexual, violent, harassing or misleading, no spam, and nothing that breaks the law or someone else’s rights. Report such content in the app. We remove content that breaks these rules and close the accounts that share it.',
+        },
+        {
+          heading: 'Deleting your account',
+          body: 'On the Me tab, tap “Delete account”. This deletes your backup, your shared links and your classes. Your dances stay on your device.',
+        },
+        {
+          heading: 'No guarantee',
+          body: 'Waltzy is provided as it is. We take care of your backup, but we cannot promise the service is always available. We may change these terms; if the change matters, we tell you in the app.',
+        },
+      ],
+    },
+    privacy: {
+      title: 'Privacy policy',
+      sections: [
+        {
+          heading: 'In short',
+          body: 'Without an account, everything stays on your device and Waltzy sends nothing anywhere. When you sign in, we store only what the features need. No ads, no tracking.',
+        },
+        {
+          heading: 'What we store',
+          body: 'Your e-mail address (to sign you in), your display name, the dances you back up, the dances you share with a link, the classes you run or join and what is posted in them, and reports you send.',
+        },
+        {
+          heading: 'Where',
+          body: 'With our hosting provider Supabase, on servers in the EU (Frankfurt, Germany). Sign-in codes are sent by e-mail.',
+        },
+        {
+          heading: 'Who can see it',
+          body: 'Your backup: only you. A shared dance: anyone with the link, together with your display name. A class: anyone with the class link, together with the teacher’s display name.',
+        },
+        {
+          heading: 'Why',
+          body: 'Only to provide what you asked for (sign-in, backup, sharing and classes) and to deal with reports.',
+        },
+        {
+          heading: 'How long',
+          body: 'Until you delete it or your account. Deleting your account (Me tab → Delete account) deletes all of it. Reports are kept as long as needed to deal with them.',
+        },
+        {
+          heading: 'Your rights',
+          body: 'You can see, change and delete your data in the app. You can also ask us what we store about you, and complain to a data protection authority.',
+        },
+      ],
+    },
+  },
+
+  /** Messages for failed cloud calls (by `CloudError.reason`) */
+  cloud: {
+    errors: {
+      offline: 'No connection. Check your internet and try again.',
+      notSignedIn: 'You’re signed out. Please sign in again.',
+      invalidCode: 'That code is wrong or has expired. Check it, or send a new one.',
+      rateLimited: 'Too many tries. Please wait a minute, then try again.',
+      limit: 'You’ve reached the limit here. Delete something first, then try again.',
+      notFound: 'This isn’t available anymore.',
+      unknown: 'Something went wrong. Please try again.',
+    },
+    retry: 'Try again',
+  },
 };
 
 export type StarterId = 'builtin-salsa-basic' | 'builtin-bachata-basic' | 'builtin-waltz-box' | 'builtin-chacha-basic';

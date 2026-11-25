@@ -7,7 +7,8 @@
  *   describeStep(step, before, t)      // non-React code takes the dictionary as an argument
  *   toast.show({ message: (t) => t.editor.saved })   // lazy text: re-resolved on a switch
  *
- * Switching: `I18nProvider` reads `prefs.language`; its context value changes only when the
+ * Switching: `I18nProvider` reads `prefs.language` (null until the user picks one: then the
+ * device language, `DEFAULT_LANGUAGE`); its context value changes only when the
  * language does, and React re-renders every consumer (also inside memo() and on screens further
  * down the navigation stack). Nothing is cached in module state except `getStrings()`, the
  * fallback for code that may render outside the providers (the root error screen).
@@ -24,7 +25,7 @@ import { en, type Strings } from './en';
 import { DEFAULT_LANGUAGE, type Language } from './languages';
 
 export type { Strings } from './en';
-export { DEFAULT_LANGUAGE, LANGUAGE_NAME, LANGUAGES, isLanguage, type Language } from './languages';
+export { DEFAULT_LANGUAGE, deviceLanguage, LANGUAGE_NAME, LANGUAGES, isLanguage, type Language } from './languages';
 
 export const STRINGS: Record<Language, Strings> = { de, en };
 
@@ -46,7 +47,8 @@ const Ctx = createContext<I18n | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const { prefs, set } = usePrefs();
-  const language = prefs.language;
+  // an explicit choice wins; otherwise the device language
+  const language = prefs.language ?? DEFAULT_LANGUAGE;
   const setLanguage = useCallback((l: Language) => void set({ language: l }), [set]);
   const value = useMemo(() => ({ language, t: STRINGS[language], setLanguage }), [language, setLanguage]);
 
