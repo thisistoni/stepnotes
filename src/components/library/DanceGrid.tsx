@@ -8,7 +8,19 @@ import type { Dance } from '@/lib/types';
 import { DanceCard, DanceCardSkeleton } from './DanceCard';
 
 /** Two-column grid of DanceCards (rows stretch so cards in a row share a height). */
-export function DanceGrid({ dances, onOpen, startIndex = 0 }: { dances: Dance[]; onOpen: (id: string) => void; startIndex?: number }) {
+export function DanceGrid({
+  dances,
+  onOpen,
+  onLongPress,
+  onMore,
+  startIndex = 0,
+}: {
+  dances: Dance[];
+  onOpen: (id: string) => void;
+  onLongPress?: (id: string) => void;
+  onMore?: (id: string) => void;
+  startIndex?: number;
+}) {
   const rows: Dance[][] = [];
   for (let i = 0; i < dances.length; i += 2) rows.push(dances.slice(i, i + 2));
   return (
@@ -16,7 +28,7 @@ export function DanceGrid({ dances, onOpen, startIndex = 0 }: { dances: Dance[];
       {rows.map((row, r) => (
         <Entrance key={row[0].id} index={startIndex + r} style={s.row}>
           {row.map((d) => (
-            <DanceCard key={d.id} dance={d} onOpen={onOpen} />
+            <DanceCard key={d.id} dance={d} onOpen={onOpen} onLongPress={onLongPress} onMore={onMore} />
           ))}
           {row.length === 1 && <View style={s.spacer} />}
         </Entrance>

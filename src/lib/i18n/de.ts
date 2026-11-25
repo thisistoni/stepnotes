@@ -25,6 +25,7 @@
  *   Duplicate · Delete · Undo  Duplizieren · Löschen · Rückgängig
  *   Save · Discard · Keep editing   Speichern · Verwerfen · Weiter bearbeiten
  *   Make my own version        Eigene Version erstellen
+ *   Collection · All dances    Sammlung · Alle Tänze;  Add dances → Tänze hinzufügen
  *   Ballroom / Latin (styles)  Standard / Latein
  */
 import type { StepInfo } from '../pattern';
@@ -37,6 +38,11 @@ import { plural, RULES, type PluralForms } from './plural';
 const num = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
 const pl = (n: number, forms: PluralForms) => plural(RULES.de, n, forms, num);
 const q = (s: string) => `„${s}“`;
+/** A long name, shortened for toasts and menus (whole characters): "Thursday evening advanc…" */
+const short = (s: string, n = 24) => {
+  const chars = Array.from(s);
+  return chars.length > n ? `${chars.slice(0, n - 1).join('').trimEnd()}…` : s;
+};
 
 /** "der linke Fuß" (nominative) and the adjective for "zum linken Fuß" / "den linken Fuß" */
 const FOOT: Record<Foot, string> = { L: 'Der linke Fuß', R: 'Der rechte Fuß' };
@@ -191,7 +197,6 @@ export const de: Strings = {
     myDances: 'Meine Tänze',
     starters: 'Zum Einstieg',
     loading: 'Deine Tänze werden geladen',
-    all: 'Alle',
     filterBy: 'Nach Stil filtern',
     styleChip: (style: string) => `Stil ${style}`,
     openHint: 'Öffnet den Tanz',
@@ -208,6 +213,45 @@ export const de: Strings = {
     noMatchStyleBody: 'Wähl einen anderen Stil oder leg einen Tanz in diesem Stil an.',
     clearSearch: 'Suche löschen',
     showAll: 'Alle Tänze zeigen',
+  },
+
+  collections: {
+    row: 'Sammlungen',
+    allDances: 'Alle Tänze',
+    chip: (name: string, n: number) => `${name}, ${pl(n, { one: '# Tanz', other: '# Tänze' })}`,
+    count: (n: number) => pl(n, { one: '# Tanz', other: '# Tänze' }),
+    steps: (n: number) => pl(n, { one: '# Schritt', other: '# Schritte' }),
+    new: 'Neu',
+    newCollection: 'Neue Sammlung',
+    nameLabel: 'Name',
+    namePlaceholder: 'z. B. Kurs am Dienstag',
+    create: 'Anlegen',
+    renameTitle: 'Sammlung umbenennen',
+    save: 'Speichern',
+    more: (name: string) => `Mehr zu ${q(name)}`,
+    rename: 'Umbenennen',
+    addDances: 'Tänze hinzufügen',
+    addDancesHint: 'Hak an, was dazugehört',
+    delete: 'Sammlung löschen',
+    deleteHint: 'Deine Tänze bleiben, wo sie sind',
+    deleted: (name: string) => `${q(short(name))} gelöscht`,
+    restoreFailed: 'Zurückholen hat nicht geklappt. Probier es bitte noch einmal.',
+    saveFailed: 'Speichern hat nicht geklappt. Probier es bitte noch einmal.',
+    emptyTitle: 'Hier ist noch nichts drin',
+    emptyBody: 'Such dir die Tänze aus, die zusammengehören – deine eigenen und die zum Einstieg.',
+    addTitle: (name: string) => `Tänze in ${q(short(name))}`,
+    searchPlaceholder: 'Tänze suchen',
+    done: 'Fertig',
+    noDances: 'Noch keine Tänze zum Hinzufügen. Leg zuerst einen an.',
+    noMatch: (query: string) => `Kein Tanz passt zu ${q(query)}`,
+    cardMore: (dance: string) => `Mehr zu ${q(dance)}`,
+    removeFrom: (name: string) => `Aus ${q(short(name))} entfernen`,
+    removeFromHint: 'Der Tanz selbst bleibt erhalten',
+    removed: (name: string) => `Aus ${q(short(name))} entfernt`,
+    addTo: 'Zu einer Sammlung hinzufügen',
+    addToHint: 'Für den Kurs, zum Üben, für die Hochzeit',
+    pickTitle: 'Zu einer Sammlung hinzufügen',
+    pickIntro: 'Sammlungen halten zusammen, was zusammengehört: „Kurs am Dienstag“, „Hochzeitstanz“, „Zum Üben“.',
   },
 
   player: {

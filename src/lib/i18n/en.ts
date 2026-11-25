@@ -12,6 +12,11 @@ import { plural, RULES, type PluralForms } from './plural';
 const num = (n: number) => String(Math.round(n * 100) / 100);
 const pl = (n: number, forms: PluralForms) => plural(RULES.en, n, forms, num);
 const q = (s: string) => `“${s}”`;
+/** A long name, shortened for toasts and menus (whole characters): "Thursday evening advanc…" */
+const short = (s: string, n = 24) => {
+  const chars = Array.from(s);
+  return chars.length > n ? `${chars.slice(0, n - 1).join('').trimEnd()}…` : s;
+};
 
 const FOOT: Record<Foot, string> = { L: 'Left', R: 'Right' };
 const ROLE: Record<Role, string> = { leader: 'Leader', follower: 'Follower' };
@@ -151,7 +156,6 @@ export const en = {
     myDances: 'My dances',
     starters: 'Starter dances',
     loading: 'Loading your dances',
-    all: 'All',
     filterBy: 'Filter by style',
     styleChip: (style: string) => `${style} dances`,
     openHint: 'Opens the dance',
@@ -169,6 +173,51 @@ export const en = {
     noMatchStyleBody: 'Pick another style, or create one in this style.',
     clearSearch: 'Clear search',
     showAll: 'Show all dances',
+  },
+
+  collections: {
+    /** the chip row (a11y) */
+    row: 'Collections',
+    allDances: 'All dances',
+    /** chip a11y: "Tuesday class, 3 dances" */
+    chip: (name: string, n: number) => `${name}, ${pl(n, { one: '# dance', other: '# dances' })}`,
+    count: (n: number) => pl(n, { one: '# dance', other: '# dances' }),
+    steps: (n: number) => pl(n, { one: '# step', other: '# steps' }),
+    /** the "+ New" chip */
+    new: 'New',
+    newCollection: 'New collection',
+    nameLabel: 'Name',
+    namePlaceholder: 'e.g. Tuesday class',
+    create: 'Create',
+    renameTitle: 'Rename collection',
+    save: 'Save',
+    more: (name: string) => `More for ${q(name)}`,
+    rename: 'Rename',
+    addDances: 'Add dances',
+    addDancesHint: 'Tick the ones that belong here',
+    delete: 'Delete collection',
+    deleteHint: 'Your dances stay where they are',
+    deleted: (name: string) => `Deleted ${q(short(name))}`,
+    restoreFailed: 'Could not bring it back. Please try again.',
+    saveFailed: 'Could not save that. Please try again.',
+    emptyTitle: 'Nothing in here yet',
+    emptyBody: 'Pick the dances that belong together: your own and the starters.',
+    /** Add dances sheet */
+    addTitle: (name: string) => `Dances in ${q(short(name))}`,
+    searchPlaceholder: 'Search dances',
+    done: 'Done',
+    noDances: 'No dances to add yet. Create one first.',
+    noMatch: (query: string) => `No dances match ${q(query)}`,
+    /** dance card menu (long press, or "…" inside a collection) */
+    cardMore: (dance: string) => `More for ${q(dance)}`,
+    removeFrom: (name: string) => `Remove from ${q(short(name))}`,
+    removeFromHint: 'The dance itself stays',
+    removed: (name: string) => `Removed from ${q(short(name))}`,
+    addTo: 'Add to a collection',
+    addToHint: 'For class, for practice, for the wedding',
+    /** AddToCollectionSheet */
+    pickTitle: 'Add to a collection',
+    pickIntro: 'Collections keep dances together, like a playlist: “Tuesday class”, “Wedding dance”, “Practice”.',
   },
 
   player: {

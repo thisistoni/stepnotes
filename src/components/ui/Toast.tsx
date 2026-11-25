@@ -165,7 +165,8 @@ const s = StyleSheet.create({
     backgroundColor: colors.toast,
     boxShadow: [{ offsetX: 0, offsetY: 10, blurRadius: 24, spreadDistance: -8, color: withAlpha(colors.shadow, 0.4) }],
   },
-  msg: { flex: 1, paddingVertical: 6 },
+  // minWidth 0: a long unbroken word (German compounds) wraps instead of pushing the action out
+  msg: { flex: 1, minWidth: 0, paddingVertical: 6 },
   action: { minHeight: 40, minWidth: 56, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   actionPressed: { backgroundColor: withAlpha(colors.card, 0.12) },
 });
