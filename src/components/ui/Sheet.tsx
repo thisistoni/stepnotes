@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { useT } from '@/lib/i18n';
 import { colors, layout, motion, radius, space, withAlpha } from '@/lib/theme';
 
 import { useReducedMotion } from './feedback';
+import { useKeyboardOpen } from './keyboard';
 import { Text } from './Text';
 
 export interface SheetProps {
@@ -25,10 +26,15 @@ export interface SheetProps {
 /**
  * Modal bottom sheet: dimmed backdrop, springs up, drag handle (drag down to dismiss), closes on
  * backdrop tap / Escape / back button. Content column max 480 wide.
+ *
+ * The sheet sits on top of the keyboard: while it is open the sheet only has the space above it
+ * (at most up to the status bar), so tall content must be able to shrink (a ScrollView with
+ * `flexShrink: 1`; see `useScrollToEndOnFocus` for a field at the end of such a list).
  */
 export function Sheet({ visible, onClose, onClosed, title, children, testID }: SheetProps) {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
+  const kb = useKeyboardOpen();
   const tr = useT();
   const [mounted, setMounted] = useState(visible);
   /** false once the exit animation ended: the native modal is being dismissed */
@@ -128,36 +134,44 @@ export function Sheet({ visible, onClose, onClosed, title, children, testID }: S
             testID="sheet-backdrop"
           />
         </Animated.View>
-        <Animated.View
-          testID={testID}
-          accessibilityViewIsModal
-          onLayout={(e: LayoutChangeEvent) => height.set(e.nativeEvent.layout.height)}
-          style={[s.panel, { paddingBottom: Math.max(insets.bottom, space.l) + space.s }, panel]}
+        <KeyboardAvoidingView
+          behavior="padding"
+          enabled={Platform.OS !== 'web'}
+          pointerEvents="box-none"
+          style={[s.area, kb && { paddingTop: insets.top + space.s }]}
         >
-          <GestureDetector gesture={pan}>
-            <View style={s.grab} accessibilityHint={tr.common.dragToClose}>
-              <View style={s.handle} />
-              {!!title && (
-                <Text variant="heading" style={s.title} accessibilityRole="header">
-                  {title}
-                </Text>
-              )}
-            </View>
-          </GestureDetector>
-          {children}
-        </Animated.View>
+          <Animated.View
+            testID={testID}
+            accessibilityViewIsModal
+            onLayout={(e: LayoutChangeEvent) => height.set(e.nativeEvent.layout.height)}
+            style={[s.panel, !kb && s.panelFree, { paddingBottom: (kb ? space.l : Math.max(insets.bottom, space.l)) + space.s }, panel]}
+          >
+            <GestureDetector gesture={pan}>
+              <View style={s.grab} accessibilityHint={tr.common.dragToClose}>
+                <View style={s.handle} />
+                {!!title && (
+                  <Text variant="heading" style={s.title} accessibilityRole="header">
+                    {title}
+                  </Text>
+                )}
+              </View>
+            </GestureDetector>
+            {children}
+          </Animated.View>
+        </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'flex-end' },
+  root: { flex: 1 },
+  area: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { backgroundColor: colors.scrim },
   panel: {
     width: '100%',
     maxWidth: layout.maxWidth,
-    maxHeight: '88%',
+    flexShrink: 1,
     alignSelf: 'center',
     backgroundColor: colors.card,
     borderTopLeftRadius: radius.xl,
@@ -165,6 +179,8 @@ const s = StyleSheet.create({
     paddingHorizontal: space.xl - 4,
     boxShadow: [{ offsetX: 0, offsetY: -10, blurRadius: 30, spreadDistance: -12, color: withAlpha(colors.shadow, 0.18) }],
   },
+  // (above the keyboard it may take all the room there is, up to the status bar)
+  panelFree: { maxHeight: '88%' },
   grab: { paddingTop: 10, paddingBottom: space.s },
   handle: { width: 40, height: 5, borderRadius: 3, backgroundColor: colors.handle, alignSelf: 'center' },
   title: { marginTop: space.m, marginBottom: space.xxs },

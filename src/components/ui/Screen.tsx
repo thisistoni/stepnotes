@@ -1,8 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
-import { use, useCallback, useEffect, useState, type ComponentRef, type ReactElement, type ReactNode, type Ref } from 'react';
+import { use, useCallback, useState, type ComponentRef, type ReactElement, type ReactNode, type Ref } from 'react';
 import {
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -19,6 +18,7 @@ import { colors, layout, space } from '@/lib/theme';
 
 import { EntranceScope } from './Entrance';
 import { FAB_HEIGHT } from './Fab';
+import { useKeyboardOpen } from './keyboard';
 import { useToastInset } from './Toast';
 
 export interface ScreenProps {
@@ -41,20 +41,6 @@ export interface ScreenProps {
   /** Pull-to-refresh (`<RefreshControl refreshing onRefresh />`) for a scrolling screen */
   refreshControl?: ReactElement<RefreshControlProps>;
   testID?: string;
-}
-
-function useKeyboardOpen() {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    const ios = Platform.OS === 'ios';
-    const a = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => setOpen(true));
-    const b = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setOpen(false));
-    return () => {
-      a.remove();
-      b.remove();
-    };
-  }, []);
-  return open;
 }
 
 /**

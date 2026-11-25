@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { Button, ChoiceRow, Sheet, Text, TextField, useToast } from '@/components/ui';
+import { Button, ChoiceRow, Sheet, Text, TextField, useScrollToEndOnFocus, useToast } from '@/components/ui';
 import { cloud, cloudErrorText, type ReportKind, type ReportReason } from '@/lib/cloud';
 import { useT } from '@/lib/i18n';
 import { space, TONE } from '@/lib/theme';
@@ -31,6 +31,7 @@ export function ReportSheet({ visible, onClose, kind, reportRef }: ReportSheetPr
   const [details, setDetails] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { scrollRef: endRef, onFocus: showEnd } = useScrollToEndOnFocus();
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -57,7 +58,7 @@ export function ReportSheet({ visible, onClose, kind, reportRef }: ReportSheetPr
 
   return (
     <Sheet visible={visible} onClose={onClose} title={t.report.title[kind]} testID="report-sheet">
-      <ScrollView style={s.scroll} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView ref={endRef} style={s.scroll} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Text variant="small" color="ink2">
           {t.report.body}
         </Text>
@@ -86,6 +87,7 @@ export function ReportSheet({ visible, onClose, kind, reportRef }: ReportSheetPr
           multiline
           minHeight={88}
           maxLength={DETAILS_MAX}
+          onFocus={showEnd}
           testID="report-details"
         />
         {!!error && (

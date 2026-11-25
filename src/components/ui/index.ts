@@ -61,6 +61,8 @@ export { goBackOrHome, Header, type HeaderProps } from './Header';
 // --- overlays & feedback ---
 /** Modal bottom sheet (backdrop, spring, drag handle, Escape / back button). */
 export { Sheet, type SheetProps } from './Sheet';
+/** For a text field at the end of a ScrollView inside a Sheet: scrolls it back into view above the keyboard. */
+export { useScrollToEndOnFocus } from './keyboard';
 /** Action list in a Sheet; actions run after the sheet has closed. */
 export { Menu, type MenuItem, type MenuProps } from './Menu';
 /** Confirmation dialog (component) + `useConfirm()` promise API (host mounted at the root). */

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button, Sheet, Text, TextField } from '@/components/ui';
 import { cloudErrorText } from '@/lib/cloud';
@@ -62,7 +62,7 @@ export function ClassFormSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} title={initial ? t.classes.editTitle : t.classes.createTitle} testID="class-form">
-      <View style={s.body}>
+      <ScrollView style={s.scroll} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <TextField
           label={t.classes.nameLabel}
           value={name}
@@ -89,7 +89,7 @@ export function ClassFormSheet({
           testID="class-description"
         />
         <Button label={initial ? t.classes.save : t.classes.createSubmit} icon={initial ? 'check' : 'plus'} loading={busy} onPress={submit} testID="class-submit" />
-      </View>
+      </ScrollView>
     </Sheet>
   );
 }
@@ -149,5 +149,7 @@ export function JoinClassSheet({ visible, onClose }: { visible: boolean; onClose
 }
 
 const s = StyleSheet.create({
+  // two fields: scrolls on a small phone once the keyboard is up
+  scroll: { flexGrow: 0, flexShrink: 1 },
   body: { gap: space.l, paddingTop: space.s, paddingBottom: space.xs },
 });

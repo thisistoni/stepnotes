@@ -95,7 +95,8 @@ export function AddDancesSheet({ collectionId, visible, onClose }: { collectionI
 
 const s = StyleSheet.create({
   search: { marginTop: space.s },
-  list: { marginTop: space.s, marginHorizontal: -space.xs },
+  // (a fixed height so the sheet keeps its size while searching; it gives way to the keyboard)
+  list: { flexShrink: 1, marginTop: space.s, marginHorizontal: -space.xs },
   listContent: { paddingBottom: space.s },
   section: { marginTop: space.s },
   sectionTitle: { marginBottom: space.xxs, marginLeft: space.xs },

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Button, Icon, Sheet, Text, TextField, useToast } from '@/components/ui';
+import { Button, Icon, Sheet, Text, TextField, useScrollToEndOnFocus, useToast } from '@/components/ui';
 import { cleanCollectionName, COLLECTION_NAME_MAX, presentDances, useCollections } from '@/lib/collections';
 import { errorText, useT } from '@/lib/i18n';
 import { useDances } from '@/lib/store';
@@ -35,6 +35,7 @@ export function AddToCollectionSheet({ danceId, visible, onClose, onClosed }: Ad
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { scrollRef: endRef, onFocus: showEnd } = useScrollToEndOnFocus();
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -74,7 +75,7 @@ export function AddToCollectionSheet({ danceId, visible, onClose, onClosed }: Ad
           {t.collections.pickIntro}
         </Text>
       )}
-      <ScrollView style={s.list} contentContainerStyle={s.listContent} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={endRef} style={s.list} contentContainerStyle={s.listContent} keyboardShouldPersistTaps="handled">
         {collections.map((c) => {
           const inIt = !!danceId && c.danceIds.includes(danceId);
           const count = presentDances(c, byId).length;
@@ -109,6 +110,7 @@ export function AddToCollectionSheet({ danceId, visible, onClose, onClosed }: Ad
               autoFocus={adding}
               returnKeyType="done"
               onSubmitEditing={createNew}
+              onFocus={showEnd}
               error={error}
               clearable
               testID="new-collection-field"
