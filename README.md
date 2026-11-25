@@ -120,7 +120,8 @@ src/lib/cloud/
 
   Sign in with any e-mail and the code `123456` (`000000` is a wrong code). One browser profile can play several devices: wipe the `waltzy.*` keys except `waltzy.fakecloud.v1`. `window.__fakeCloud.setOffline(true)` makes every call fail with `offline`.
 - **Device keys of sharing and classes**: `waltzy.shares.v1` (my links, for the signed-in user), `waltzy.classes.v1` (joined codes, codes still to join in the account, the last list of my classes), `waltzy.classdetails.v1` (the last loaded page of up to 20 classes, for offline), `waltzy.blocked.v1` (blocked people `{ id, name, at }`).
-- **Links** (used by sharing and classes): `https://<web origin>/s/<shareId>` (a shared dance), `https://<web origin>/c/<classCode>` (a class); inside the app `waltzy://s/<shareId>`, `waltzy://c/<classCode>`. `WEB_ORIGIN` is the page's origin on web, else `EXPO_PUBLIC_WEB_ORIGIN` or `https://waltzy.expo.app`.
+- **Links** (used by sharing and classes): `https://<web origin>/s/<shareId>` (a shared dance), `https://<web origin>/c/<classCode>` (a class); inside the app `waltzy://s/<shareId>`, `waltzy://c/<classCode>`. `WEB_ORIGIN` is the page's origin on web, else `EXPO_PUBLIC_WEB_ORIGIN` or `https://waltzy.antoniobeslic.com`.
+- **Web hosting**: the web app runs at `https://waltzy.antoniobeslic.com`, built from the `Dockerfile` (static export served by nginx, `deploy/nginx.conf`) by Dokploy on the owner's server. The phone app's links and QR codes point there, so that address has to stay up.
 
 ## Languages
 

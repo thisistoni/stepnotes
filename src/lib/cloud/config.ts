@@ -14,7 +14,7 @@ export const CLOUD_MODE: 'fake' | 'supabase' = process.env.EXPO_PUBLIC_CLOUD ===
 export const WEB_ORIGIN: string =
   Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin
     ? window.location.origin
-    : (process.env.EXPO_PUBLIC_WEB_ORIGIN ?? 'https://waltzy.expo.app');
+    : (process.env.EXPO_PUBLIC_WEB_ORIGIN ?? 'https://waltzy.antoniobeslic.com');
 
 /** In-app links use the app scheme ("waltzy://s/<id>"). */
 export const APP_SCHEME = 'waltzy';
