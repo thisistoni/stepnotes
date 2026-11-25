@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
-import { use, useCallback, useEffect, useState, type ComponentRef, type ReactNode, type Ref } from 'react';
+import { use, useCallback, useEffect, useState, type ComponentRef, type ReactElement, type ReactNode, type Ref } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -9,6 +9,7 @@ import {
   StyleSheet,
   View,
   type LayoutChangeEvent,
+  type RefreshControlProps,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -37,6 +38,8 @@ export interface ScreenProps {
   /** Respect the top safe area (default true; modals on iOS may pass false) */
   topInset?: boolean;
   scrollRef?: Ref<ComponentRef<typeof ScrollView>>;
+  /** Pull-to-refresh (`<RefreshControl refreshing onRefresh />`) for a scrolling screen */
+  refreshControl?: ReactElement<RefreshControlProps>;
   testID?: string;
 }
 
@@ -69,6 +72,7 @@ export function Screen({
   contentStyle,
   topInset = true,
   scrollRef,
+  refreshControl,
   testID,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
@@ -97,6 +101,7 @@ export function Screen({
             {scroll ? (
               <ScrollView
                 ref={scrollRef}
+                refreshControl={refreshControl}
                 style={s.flex}
                 contentContainerStyle={[{ paddingHorizontal: gutter, paddingBottom: scrollBottom }, contentStyle]}
                 keyboardShouldPersistTaps="handled"

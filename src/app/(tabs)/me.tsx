@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BackupCard } from '@/components/account/BackupCard';
@@ -11,6 +11,8 @@ import { Button, Card, Entrance, Header, Icon, IconButton, Screen, Text, useConf
 import { cloudErrorText } from '@/lib/cloud';
 import { useAuth } from '@/lib/cloud/auth';
 import { LANGUAGE_NAME, useI18n } from '@/lib/i18n';
+import { useBlocked } from '@/lib/social/blocked';
+import { useShares } from '@/lib/social/shares';
 import { colors, space } from '@/lib/theme';
 
 /**
@@ -27,6 +29,14 @@ export default function Me() {
   const [nameOpen, setNameOpen] = useState(false);
   const [busy, setBusy] = useState<'signOut' | 'delete' | null>(null);
   const version = Constants.expoConfig?.version ?? '';
+  const { shares, refresh: refreshShares } = useShares();
+  const { blocked } = useBlocked();
+  // the number of shared links next to "My shared links"
+  useFocusEffect(
+    useCallback(() => {
+      if (signedIn) refreshShares().catch(() => {});
+    }, [signedIn, refreshShares]),
+  );
 
   const onSignOut = async () => {
     const ok = await confirm({ title: (tr) => tr.account.signOutTitle, message: (tr) => tr.account.signOutMessage, confirmLabel: (tr) => tr.account.signOut, icon: 'logout' });
@@ -115,6 +125,27 @@ export default function Me() {
             </Card>
           </Entrance>
         )}
+
+        <Entrance index={2}>
+          <MeSection title={t.blocked.sectionTitle}>
+            {ready && signedIn ? (
+              <MeRow
+                icon="link"
+                label={t.shareLink.myLinks}
+                value={shares ? String(shares.length) : undefined}
+                onPress={() => router.push('/shared-links')}
+                testID="me-links"
+              />
+            ) : null}
+            <MeRow
+              icon="block"
+              label={t.blocked.listTitle}
+              value={blocked.length ? String(blocked.length) : undefined}
+              onPress={() => router.push('/blocked')}
+              testID="me-blocked"
+            />
+          </MeSection>
+        </Entrance>
 
         <Entrance index={2}>
           <MeSection title={t.account.sectionApp}>

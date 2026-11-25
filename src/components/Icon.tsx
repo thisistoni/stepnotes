@@ -165,6 +165,31 @@ const ICONS = {
     { d: 'M12 12.5v5M9.5 15h5' },
   ],
   shield: [{ d: 'M12 3.5l7 2.8v5.2c0 4.4-3 7.8-7 9-4-1.2-7-4.6-7-9V6.3z' }, { d: 'M9 12l2.2 2.2L15.5 10' }],
+  /** Two chain links (shared links) */
+  link: [
+    { d: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2' },
+    { d: 'M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2' },
+  ],
+  /** Report */
+  flag: [{ d: 'M5.5 21V4.5' }, { d: 'M5.5 4.5h11l-2.5 4.25 2.5 4.25h-11' }],
+  /** Block a person */
+  block: [{ d: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' }, { d: 'M5.6 5.6l12.8 12.8' }],
+  /** QR code (invite) */
+  qr: [
+    { d: 'M4 4h6v6H4z' },
+    { d: 'M14 4h6v6h-6z' },
+    { d: 'M4 14h6v6H4z' },
+    { d: 'M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5z', fill: true },
+  ],
+  /** Pull again (refresh) */
+  refresh: [{ d: 'M19.5 4.5V9H15' }, { d: 'M19.2 9A7.5 7.5 0 1 0 19.5 13' }],
+  /** Teacher / class you teach */
+  cap: [{ d: 'M2.5 9.5L12 5l9.5 4.5L12 14z' }, { d: 'M6.5 11.5v4.25c1.5 1.5 3.5 2.25 5.5 2.25s4-.75 5.5-2.25V11.5' }, { d: 'M21.5 9.5V14' }],
+  /** Save into the library */
+  'library-add': [
+    { d: 'M6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11A2.5 2.5 0 0 1 6.5 4z' },
+    { d: 'M12 8.5v7M8.5 12h7' },
+  ],
   'flat-shoe': foot(SHOE_PARTS, 'translate(12 12) rotate(12) scale(6.9)', 0.18),
   heel: foot(HEEL_PARTS, 'translate(12 12) rotate(12) scale(6.9)', 0.18),
   // a left and a right shoe, walking

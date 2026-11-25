@@ -33,7 +33,7 @@ export const DanceCard = memo(function DanceCard({ dance, onOpen, onLongPress, o
       onAccessibilityAction={onLongPress ? (e) => e.nativeEvent.actionName === 'longpress' && onLongPress(dance.id) : undefined}
       radius={radius.card}
       lipDepth={lip.lg}
-      accessibilityLabel={[name, dance.style.trim(), meta].filter(Boolean).join(', ')}
+      accessibilityLabel={[name, dance.style.trim(), meta, dance.source ? t.received.by(dance.source.author.trim() || t.received.someone) : ''].filter(Boolean).join(', ')}
       accessibilityHint={t.library.openHint}
       testID={`dance-card-${dance.id}`}
       style={s.card}
@@ -68,6 +68,12 @@ export const DanceCard = memo(function DanceCard({ dance, onOpen, onLongPress, o
         <Text variant="caption" color="ink2" numberOfLines={2} style={s.meta}>
           {meta}
         </Text>
+        {/* credit of a dance saved from someone's link or class */}
+        {!!dance.source && (
+          <Text variant="caption" color="primaryInk" numberOfLines={1} style={s.meta} testID={`dance-card-credit-${dance.id}`}>
+            {t.received.by(dance.source.author.trim() || t.received.someone)}
+          </Text>
+        )}
       </View>
     </PressableLip>
   );
