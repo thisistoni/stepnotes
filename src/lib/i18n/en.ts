@@ -1042,7 +1042,7 @@ export const en = {
         },
         {
           heading: 'Where',
-          body: 'With our hosting provider Supabase, on servers in the EU (Frankfurt, Germany). Sign-in codes are sent by e-mail. If you sign in with Apple, Apple confirms to us that it is you.',
+          body: 'With our hosting provider Supabase, on servers in the EU (Frankfurt, Germany). Sign-in codes are sent by e-mail. If you sign in with Apple, Apple confirms to us that it is you. The web page that opens shared links runs on our own server and is delivered through Cloudflare.',
         },
         {
           heading: 'Who can see it',

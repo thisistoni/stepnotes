@@ -1052,7 +1052,7 @@ export const de: Strings = {
         },
         {
           heading: 'Wo',
-          body: 'Bei unserem Hosting-Anbieter Supabase, auf Servern in der EU (Frankfurt, Deutschland). Anmelde-Codes werden per E-Mail verschickt. Wenn du dich mit Apple anmeldest, bestätigt uns Apple, dass du es bist.',
+          body: 'Bei unserem Hosting-Anbieter Supabase, auf Servern in der EU (Frankfurt, Deutschland). Anmelde-Codes werden per E-Mail verschickt. Wenn du dich mit Apple anmeldest, bestätigt uns Apple, dass du es bist. Die Webseite, die geteilte Links öffnet, läuft auf unserem eigenen Server und wird über Cloudflare ausgeliefert.',
         },
         {
           heading: 'Wer es sieht',
