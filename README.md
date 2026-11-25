@@ -82,6 +82,8 @@ src/
 
 Optional accounts and the library backup run on Supabase (EU, Frankfurt). The app is local-first: AsyncStorage is the source of truth for the UI, the cloud is a backup that merges between devices.
 
+The database (tables, row level security, functions) is in `supabase/migrations/`, exactly as applied to the live project. Change the schema with a new migration file there, never by hand in the dashboard. People who only receive (open a link, join a class) need no account and read through functions keyed by an unguessable id or code; people who publish need an account and manage their own rows.
+
 ```
 src/lib/cloud/
   api.ts          CloudApi interface + CloudError (reason: offline | notSignedIn | invalidCode | rateLimited | limit | notFound | unknown)
