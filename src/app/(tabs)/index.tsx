@@ -38,9 +38,11 @@ export default function Library() {
     setStyleKey(null);
   };
   const noMatches = ready && filtering && mine.length === 0 && starters.length === 0;
+  // the empty card has its own create button: no second, floating one on top of it
+  const showsEmptyCard = ready && custom.length === 0 && !filtering;
 
   return (
-    <Screen padded={false} fab={<Fab label={t.library.create} onPress={create} testID="fab-create" />} testID="library">
+    <Screen padded={false} fab={showsEmptyCard ? undefined : <Fab label={t.library.create} onPress={create} testID="fab-create" />} testID="library">
       <Header
         large
         eyebrow="Waltzy"

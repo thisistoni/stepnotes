@@ -666,14 +666,14 @@ export const de: Strings = {
   tabs: {
     library: 'Tänze',
     classes: 'Kurse',
-    me: 'Ich',
+    me: 'Profil',
     classesTitle: 'Kurse',
     classesSoonTitle: 'Lern mit deinem Tanzkurs',
     classesSoonBody: 'Bald kann deine Tanzlehrerin oder dein Tanzlehrer hier die Schritte jeder Stunde teilen – du trittst einfach über einen Link bei.',
   },
 
   account: {
-    title: 'Ich',
+    title: 'Profil',
     pitchTitle: 'Sichere deine Tänze und teile sie mit einem Link',
     pitchBody: 'Melde dich mit deiner E-Mail-Adresse an. Ein Passwort brauchst du nicht: Wir schicken dir einen Code.',
     signIn: 'Anmelden',

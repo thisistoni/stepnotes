@@ -631,7 +631,7 @@ export const en = {
   tabs: {
     library: 'Library',
     classes: 'Classes',
-    me: 'Me',
+    me: 'Profile',
     /** Classes tab until classes exist */
     classesTitle: 'Classes',
     classesSoonTitle: 'Learn with your dance class',
@@ -640,7 +640,7 @@ export const en = {
 
   /** Signing in, the Me tab, account deletion */
   account: {
-    title: 'Me',
+    title: 'Profile',
     pitchTitle: 'Back up your dances and share them with a link',
     pitchBody: 'Sign in with your e-mail. There is no password: we send you a code.',
     signIn: 'Sign in',
