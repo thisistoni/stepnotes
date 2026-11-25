@@ -1009,7 +1009,7 @@ export const en = {
         },
         {
           heading: 'Your account',
-          body: 'You sign in with your e-mail and a one-time code. Your display name is shown on dances you share and classes you run. Keep your e-mail account safe: whoever can read it can sign in as you.',
+          body: 'You sign in with your e-mail and a one-time code, or on an iPhone with Apple. Your display name is shown on dances you share and classes you run. Keep your e-mail account safe: whoever can read it can sign in as you.',
         },
         {
           heading: 'What you share',
@@ -1038,11 +1038,11 @@ export const en = {
         },
         {
           heading: 'What we store',
-          body: 'Your e-mail address (to sign you in), your display name, the dances you back up, the dances you share with a link, the classes you run or join and what is posted in them, and reports you send.',
+          body: 'Your e-mail address (to sign you in; with Apple it can be the relay address Apple gives us instead), your display name, the dances you back up, the dances you share with a link, the classes you run or join and what is posted in them, and reports you send.',
         },
         {
           heading: 'Where',
-          body: 'With our hosting provider Supabase, on servers in the EU (Frankfurt, Germany). Sign-in codes are sent by e-mail.',
+          body: 'With our hosting provider Supabase, on servers in the EU (Frankfurt, Germany). Sign-in codes are sent by e-mail. If you sign in with Apple, Apple confirms to us that it is you.',
         },
         {
           heading: 'Who can see it',

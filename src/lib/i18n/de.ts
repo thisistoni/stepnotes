@@ -1019,7 +1019,7 @@ export const de: Strings = {
         },
         {
           heading: 'Dein Konto',
-          body: 'Du meldest dich mit deiner E-Mail-Adresse und einem Einmal-Code an. Dein Name ist bei Tänzen zu sehen, die du teilst, und bei Kursen, die du leitest. Pass gut auf dein E-Mail-Postfach auf: Wer es lesen kann, kann sich als du anmelden.',
+          body: 'Du meldest dich mit deiner E-Mail-Adresse und einem Einmal-Code an oder auf dem iPhone mit Apple. Dein Name ist bei Tänzen zu sehen, die du teilst, und bei Kursen, die du leitest. Pass gut auf dein E-Mail-Postfach auf: Wer es lesen kann, kann sich als du anmelden.',
         },
         {
           heading: 'Was du teilst',
@@ -1048,11 +1048,11 @@ export const de: Strings = {
         },
         {
           heading: 'Was wir speichern',
-          body: 'Deine E-Mail-Adresse (für die Anmeldung), deinen Namen, die Tänze, die du sicherst, die Tänze, die du mit einem Link teilst, die Kurse, die du leitest oder besuchst, samt ihren Beiträgen, und Meldungen, die du schickst.',
+          body: 'Deine E-Mail-Adresse (für die Anmeldung; bei Apple kann es die Weiterleitungsadresse sein, die Apple uns stattdessen gibt), deinen Namen, die Tänze, die du sicherst, die Tänze, die du mit einem Link teilst, die Kurse, die du leitest oder besuchst, samt ihren Beiträgen, und Meldungen, die du schickst.',
         },
         {
           heading: 'Wo',
-          body: 'Bei unserem Hosting-Anbieter Supabase, auf Servern in der EU (Frankfurt, Deutschland). Anmelde-Codes werden per E-Mail verschickt.',
+          body: 'Bei unserem Hosting-Anbieter Supabase, auf Servern in der EU (Frankfurt, Deutschland). Anmelde-Codes werden per E-Mail verschickt. Wenn du dich mit Apple anmeldest, bestätigt uns Apple, dass du es bist.',
         },
         {
           heading: 'Wer es sieht',
