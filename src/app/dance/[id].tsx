@@ -1,12 +1,13 @@
 /**
  * Player for a dance in the library: the shared PlayerView plus the library actions (edit / make
- * my own, duplicate, share, delete with undo). `?share=1` opens the share sheet right away
+ * my own, duplicate, add to a collection, share, delete with undo). `?share=1` opens the share sheet right away
  * ("Manage link" on a shared dance's page).
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 
 import { DanceNotFound } from '@/components/DanceNotFound';
+import { AddToCollectionSheet } from '@/components/library/AddToCollectionSheet';
 import { PlayerView, type PlayerHandle } from '@/components/player/PlayerView';
 import { shareDance } from '@/components/player/shareDance';
 import { ShareSheet } from '@/components/social/ShareSheet';
@@ -51,6 +52,7 @@ function DancePlayer({ dance, onLeaving, openShare }: { dance: Dance; onLeaving:
   const [menuOpen, setMenuOpen] = useState(false);
   // starter dances are on every phone already: they are only shared as text
   const [shareOpen, setShareOpen] = useState(openShare && !builtIn);
+  const [collectionOpen, setCollectionOpen] = useState(false);
   const name = dance.name.trim() || t.common.untitled;
   const onDuplicate = async () => {
     try {
@@ -98,6 +100,7 @@ function DancePlayer({ dance, onLeaving, openShare }: { dance: Dance; onLeaving:
       ? { key: 'own', label: t.player.makeOwn, hint: t.player.makeOwnHint, icon: 'pencil', onPress: makeOwn }
       : { key: 'edit', label: t.player.editSteps, icon: 'pencil', onPress: edit },
     { key: 'dup', label: t.player.duplicate, hint: t.player.duplicateHint, icon: 'copy', onPress: onDuplicate },
+    { key: 'collect', label: t.collections.addTo, hint: t.collections.addToHint, icon: 'stack-plus', onPress: () => setCollectionOpen(true) },
     { key: 'share', label: t.player.share, hint: builtIn ? t.player.shareHint : t.player.shareLinkHint, icon: 'share', onPress: onShare },
     ...(builtIn ? [] : [{ key: 'del', label: t.player.delete, icon: 'trash' as const, destructive: true, onPress: onDelete }]),
   ];
@@ -117,6 +120,7 @@ function DancePlayer({ dance, onLeaving, openShare }: { dance: Dance; onLeaving:
       listAction={builtIn ? { label: t.player.makeOwnShort, onPress: makeOwn } : { label: t.player.editSteps, onPress: edit }}
     >
       <Menu visible={menuOpen} onClose={() => setMenuOpen(false)} title={name} items={menuItems} />
+      <AddToCollectionSheet danceId={dance.id} visible={collectionOpen} onClose={() => setCollectionOpen(false)} />
       {!builtIn && <ShareSheet visible={shareOpen} onClose={() => setShareOpen(false)} dance={dance} onBeforeLeave={pause} />}
     </PlayerView>
   );

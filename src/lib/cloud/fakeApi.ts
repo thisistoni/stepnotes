@@ -317,12 +317,19 @@ export const fakeApi: CloudApi = {
       if (patch.note !== undefined) p.note = patch.note;
       if (patch.dance !== undefined) p.dance = copy(patch.dance);
       p.updatedAt = now(st);
+      // like the database trigger: any change to its dances counts as activity in the class
+      const c = st.classes.find((x) => x.id === p.classId);
+      if (c) c.updatedAt = p.updatedAt;
     }, true),
 
   removeClassPost: (postId) =>
     call((st, uid) => {
       const me = needUser(uid);
-      st.posts = st.posts.filter((p) => !(p.id === postId && st.classes.some((c) => c.id === p.classId && c.owner === me)));
+      const gone = st.posts.find((p) => p.id === postId && st.classes.some((c) => c.id === p.classId && c.owner === me));
+      if (!gone) return;
+      st.posts = st.posts.filter((p) => p !== gone);
+      const c = st.classes.find((x) => x.id === gone.classId);
+      if (c) c.updatedAt = now(st);
     }, true),
 
   report: (kind, ref, reason, details) =>
