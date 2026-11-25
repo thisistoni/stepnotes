@@ -19,6 +19,9 @@ import { ConfirmHost, ToastHost } from '@/components/ui';
 import { AuthProvider } from '@/lib/cloud/auth';
 import { DanceSync } from '@/lib/cloud/DanceSync';
 import { SyncProvider } from '@/lib/cloud/sync';
+import { BlockedProvider } from '@/lib/social/blocked';
+import { ClassesProvider } from '@/lib/social/classes';
+import { SharesProvider } from '@/lib/social/shares';
 import { I18nProvider } from '@/lib/i18n';
 import { PrefsProvider, usePrefs } from '@/lib/prefs';
 import { DanceProvider, useDances } from '@/lib/store';
@@ -59,12 +62,19 @@ export default function RootLayout() {
             <AuthProvider>
               <SyncProvider>
                 <DanceSync />
-                <ToastHost>
-                  <ConfirmHost>
-                    <StatusBar style="dark" />
-                    <AppStack fontsReady={fontsLoaded || !!fontError} />
-                  </ConfirmHost>
-                </ToastHost>
+                {/* sharing and classes (blocked people, my links, my classes) */}
+                <BlockedProvider>
+                  <SharesProvider>
+                    <ClassesProvider>
+                      <ToastHost>
+                        <ConfirmHost>
+                          <StatusBar style="dark" />
+                          <AppStack fontsReady={fontsLoaded || !!fontError} />
+                        </ConfirmHost>
+                      </ToastHost>
+                    </ClassesProvider>
+                  </SharesProvider>
+                </BlockedProvider>
               </SyncProvider>
             </AuthProvider>
           </DanceProvider>
@@ -85,7 +95,7 @@ function AppStack({ fontsReady }: { fontsReady: boolean }) {
     return () => clearTimeout(t);
   }, []);
   const ready = (fontsReady && prefsReady) || timedOut;
-  const gated = ready && !prefs.onboardingDone && pathname !== '/intro';
+  const gated = ready && !prefs.onboardingDone && pathname !== '/intro' && !isPublicPath(pathname);
   // Stack.Protected sends blocked routes to the first available screen; make the target explicit
   // so a future unprotected route can never become the landing page.
   useEffect(() => {
@@ -101,6 +111,12 @@ function AppStack({ fontsReady }: { fontsReady: boolean }) {
         >
           {/* First-run intro, and the "How to read the footprints" lesson (`/intro?lesson=1`). */}
           <Stack.Screen name="intro" options={{ animation: 'fade' }} />
+          {/* Links people send (a shared dance, a class): open for everyone, even on the very
+              first visit, without the intro (it offers the footprint lesson instead). */}
+          <Stack.Screen name="s/[id]" />
+          <Stack.Screen name="c/[code]" />
+          <Stack.Screen name="c/[code]/[postId]" />
+          <Stack.Screen name="c/[code]/invite" />
           {/* Until the intro is done every other route redirects to it. */}
           <Stack.Protected guard={prefs.onboardingDone}>
             {/* Library · Classes · Me (the tab bar); everything below opens above it */}
@@ -111,6 +127,8 @@ function AppStack({ fontsReady }: { fontsReady: boolean }) {
             <Stack.Screen name="sign-in" options={{ presentation: 'modal' }} />
             <Stack.Screen name="legal/terms" />
             <Stack.Screen name="legal/privacy" />
+            <Stack.Screen name="shared-links" />
+            <Stack.Screen name="blocked" />
           </Stack.Protected>
         </Stack>
       ) : (
@@ -119,6 +137,9 @@ function AppStack({ fontsReady }: { fontsReady: boolean }) {
     </SplashGate>
   );
 }
+
+/** Shared dances and classes: reachable without the intro. */
+const isPublicPath = (path: string) => /^\/(s|c)\//.test(path);
 
 function SplashGate({ fontsReady, children }: { fontsReady: boolean; children: ReactNode }) {
   const { ready: dancesReady } = useDances();

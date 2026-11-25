@@ -20,11 +20,14 @@ A mobile app (iOS and Android, built with Expo / React Native) for **learning an
   - *Chart*: the printed view with every position numbered, one chart per bar (short dances of up to three bars can also show all steps at once).
   - Leader, Follower or **Both** side by side, in sync.
   - Tempo 50–125 %, loop, spoken counts, mirror mode, L / R letters, and vibration on each step (phones only).
-  - Duplicate, share as text, delete (with undo).
+  - Duplicate, share (a link with a QR code, or as text), delete (with undo).
 - **Editor**: drag the feet on a grid, press and hold a foot to turn it (the toes follow your finger, in 15° steps; the ±15° buttons do the same), drag the empty floor to move the view (the crosshair shows everything again), and set each step's count, length (½ / 1 / 2 beats), foot, action (step, tap, hold) and a note. Generate the follower part as a mirror of the leader, then adjust it. Undo for every change. "Make my own version" of a starter dance opens the editor on a copy that is only saved when you press Save.
 - **Import**: paste a dance someone shared (extra chat text around it is fine).
 - **Tabs**: Library · Classes · Me. Player, editor, import, sign-in and the legal pages open above the tabs.
-- **Account (optional)**: everything works on the device without one. Signing in (e-mail + 6-digit code, no password) backs your dances up and brings them to your other devices. The Me tab shows the backup status, lets you change your name, sign out (dances stay) and delete the account. Classes is a placeholder for now.
+- **Account (optional)**: everything works on the device without one. Signing in (e-mail + 6-digit code, no password) backs your dances up and brings them to your other devices. The Me tab shows the backup status, lets you change your name, sign out (dances stay) and delete the account, and lists your shared links and the people you blocked.
+- **Sharing** (needs an account to publish, never to receive): a dance gets a link and a QR code (update it after changes, or stop sharing). Anyone who opens the link sees the dance in the player, even on their very first visit (no intro first), and can save a copy with credit ("by Anna").
+- **Classes**: a teacher creates a class, posts dances with a note ("Week 3: the turn"), updates or removes them and invites students with a link, a code and a big QR code. Students join without an account (remembered on the device, joined in the account after signing in), watch and save the dances. The Classes tab lists the classes you teach and joined, also offline.
+- **Report and block**: every shared dance, class and class dance can be reported (four reasons); blocking a person hides their links and classes on this device.
 - **Languages**: German and English. The app follows the device language (German if the device is set to German, otherwise English) until you pick one under Me → Language or with DE | EN on the first intro screen; that choice is saved with the other settings.
 
 ## Run it
@@ -54,7 +57,10 @@ src/
     (tabs)/_layout.tsx    tab bar: Library (index.tsx, "/"), Classes (classes.tsx), Me (me.tsx)
     sign-in.tsx           e-mail → code → name (modal)
     legal/                terms.tsx, privacy.tsx
-    dance/[id].tsx        player
+    dance/[id].tsx        player of a library dance (?share=1 opens the share sheet)
+    s/[id].tsx            a shared dance (public, outside the intro gate)
+    c/[code].tsx          a class (public); c/[code]/[postId].tsx one of its dances; c/[code]/invite.tsx
+    shared-links.tsx, blocked.tsx   Profile → My shared links / Blocked people
     edit/[id].tsx         editor ("new" creates a dance, ?from=<id> copies one)
     import.tsx            paste a shared dance
   components/
@@ -62,7 +68,9 @@ src/
     StepDiagram.tsx       the SVG diagram: animation, chart and touch editing
     FootShape.tsx         shoe and heel footprints
     TabBar.tsx            the custom tab bar
-    library/ player/ editor/ intro/ account/ legal/   parts of each screen
+    library/ player/ editor/ intro/ account/ legal/ social/   parts of each screen
+    player/PlayerView.tsx the player without the library around it (used by the three player routes)
+    QrCode.tsx            QR code (pure-JS matrix from qrcode-generator, drawn with react-native-svg)
   lib/
     types.ts              data model
     pattern.ts            step maths: weight, interpolation, mirror, partner, descriptions
@@ -72,6 +80,7 @@ src/
     store.tsx, prefs.tsx  saved dances and settings (AsyncStorage)
     cloud/                backend seam, accounts, library sync (see Backend)
     libraryEvents.ts      explicit delete / undo events for the sync
+    social/               blocked people, my shared links, my classes (device caches), links, saving with credit
     validate.ts           checks imported and stored dances
     i18n/                 German and English texts, useT(), plurals
     builtins.ts           starter dances
@@ -107,6 +116,7 @@ src/lib/cloud/
   ```
 
   Sign in with any e-mail and the code `123456` (`000000` is a wrong code). One browser profile can play several devices: wipe the `waltzy.*` keys except `waltzy.fakecloud.v1`. `window.__fakeCloud.setOffline(true)` makes every call fail with `offline`.
+- **Device keys of sharing and classes**: `waltzy.shares.v1` (my links, for the signed-in user), `waltzy.classes.v1` (joined codes, codes still to join in the account, the last list of my classes), `waltzy.classdetails.v1` (the last loaded page of up to 20 classes, for offline), `waltzy.blocked.v1` (blocked people `{ id, name, at }`).
 - **Links** (used by sharing and classes): `https://<web origin>/s/<shareId>` (a shared dance), `https://<web origin>/c/<classCode>` (a class); inside the app `waltzy://s/<shareId>`, `waltzy://c/<classCode>`. `WEB_ORIGIN` is the page's origin on web, else `EXPO_PUBLIC_WEB_ORIGIN` or `https://waltzy.expo.app`.
 
 ## Languages

@@ -1,18 +1,20 @@
 import { memo } from 'react';
-import { Linking, StyleSheet } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 
-import { Button, Card, Text, useToast } from '@/components/ui';
+import { Button, Card, Icon, Text, useToast } from '@/components/ui';
 import { useT } from '@/lib/i18n';
-import { space } from '@/lib/theme';
+import { colors, space } from '@/lib/theme';
 import type { Dance } from '@/lib/types';
 
-/** Description and reference-video button. Renders nothing when the dance has neither. */
+/** Credit ("Saved from Anna’s link"), description and reference-video button. Renders nothing when the dance has none of them. */
 export const AboutCard = memo(function AboutCard({ dance }: { dance: Dance }) {
   const toast = useToast();
   const t = useT();
   const description = dance.description.trim();
   const url = dance.videoUrl?.trim();
-  if (!description && !url) return null;
+  const source = dance.source;
+  if (!description && !url && !source) return null;
+  const author = source?.author.trim() || t.received.someone;
   const open = async () => {
     try {
       await Linking.openURL(url!);
@@ -23,6 +25,14 @@ export const AboutCard = memo(function AboutCard({ dance }: { dance: Dance }) {
   return (
     <Card testID="about-card">
       <Text variant="cardTitle">{t.about.title}</Text>
+      {!!source && (
+        <View style={s.credit} testID="about-credit">
+          <Icon name={source.kind === 'class' ? 'cap' : 'link'} size={16} color={colors.ink2} />
+          <Text variant="small" color="ink2" style={s.creditText}>
+            {source.kind === 'class' ? t.received.creditClass(author) : t.received.credit(author)}
+          </Text>
+        </View>
+      )}
       {!!description && (
         <Text variant="body" color="ink2" style={s.desc}>
           {description}
@@ -36,6 +46,8 @@ export const AboutCard = memo(function AboutCard({ dance }: { dance: Dance }) {
 });
 
 const s = StyleSheet.create({
+  credit: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xs },
+  creditText: { flex: 1 },
   desc: { marginTop: space.xs },
   video: { marginTop: space.m },
 });

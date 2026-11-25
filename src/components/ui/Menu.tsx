@@ -27,7 +27,7 @@ export interface MenuProps {
 }
 
 /**
- * Action list in a bottom sheet. Picking an item closes the sheet first and runs the action once
+ * Action list in a bottom sheet (each row has the testID `menu-<key>`). Picking an item closes the sheet first and runs the action once
  * it is gone, so the action may safely open a ConfirmDialog or navigate.
  */
 export function Menu({ visible, onClose, title, items }: MenuProps) {
@@ -53,6 +53,7 @@ export function Menu({ visible, onClose, title, items }: MenuProps) {
             accessibilityState={{ disabled: !!it.disabled }}
             aria-disabled={!!it.disabled}
             disabled={it.disabled}
+            testID={`menu-${it.key}`}
             onPress={() => {
               pending.current = it.onPress;
               onClose();
