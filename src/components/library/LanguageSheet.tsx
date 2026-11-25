@@ -7,7 +7,7 @@ import { ROLE_COLOR, space } from '@/lib/theme';
 /** Shown in both languages, so it can always be found. */
 const TITLE = 'Sprache · Language';
 
-/** Language picker (from the library's globe button): the whole app switches at once. */
+/** Language picker (the Language row on the Me tab): the whole app switches at once. */
 export function LanguageSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { language, setLanguage } = useI18n();
   const pick = (l: Language) => {

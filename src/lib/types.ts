@@ -64,6 +64,17 @@ export interface Dance {
   /** Optional link to a reference video (YouTube, Instagram…) */
   videoUrl?: string;
   builtIn?: boolean;
+  /** Set on a dance that was saved from someone else's link or class (credit). Not part of a JSON export. */
+  source?: DanceSource;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Where a saved dance came from: a shared link (`ref` = share id) or a class (`ref` = class code). */
+export interface DanceSource {
+  kind: 'share' | 'class';
+  ref: string;
+  /** the author's display name at the time it was saved */
+  author: string;
+  authorId: string;
 }

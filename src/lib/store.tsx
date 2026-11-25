@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { BUILT_IN_IDS, builtInDances } from './builtins';
+import type { RemoteChanges } from './cloud/sync';
 import { useT, type Strings } from './i18n';
+import { emitRemoved, emitRestored } from './libraryEvents';
 import { DEFAULT_START, uid } from './pattern';
 import { usePersistedValue } from './persist';
 import type { Dance } from './types';
@@ -33,6 +35,11 @@ export interface DanceStore {
   duplicate: (dance: Dance, name?: string) => Promise<Dance>;
   /** Parse pasted text and add it. Throws `DanceValidationError` with a user-facing message. */
   importJson: (json: string) => Promise<Dance>;
+  /**
+   * Write changes from the cloud backup (the sync engine calls this). Remote data is validated;
+   * an unreadable dance is skipped (its id is returned), a local dance that is newer is kept.
+   */
+  applyRemote: (changes: RemoteChanges) => Promise<string[]>;
 }
 
 const Ctx = createContext<DanceStore | null>(null);
@@ -85,26 +92,32 @@ export function DanceProvider({ children }: { children: ReactNode }) {
   );
 
   const remove = useCallback(
-    (id: string) =>
-      update<Dance | null>((cur) => {
+    async (id: string) => {
+      const removed = await update<Dance | null>((cur) => {
         const index = cur.findIndex((c) => c.id === id);
         if (index < 0) return [cur, null];
         removedAt.current.set(id, index);
         return [cur.filter((c) => c.id !== id), cur[index]];
-      }),
+      });
+      // the user deleted it: the cloud backup deletes it too (unless Undo comes first)
+      if (removed) emitRemoved('dance', id);
+      return removed;
+    },
     [update],
   );
 
   const restore = useCallback(
-    (dance: Dance) =>
-      update((cur) => {
-        if (cur.some((c) => c.id === dance.id)) return [cur, undefined];
+    async (dance: Dance) => {
+      const restored = await update((cur) => {
+        if (cur.some((c) => c.id === dance.id)) return [cur, false];
         const at = Math.min(removedAt.current.get(dance.id) ?? 0, cur.length);
         removedAt.current.delete(dance.id);
         const next = [...cur];
         next.splice(at, 0, dance);
-        return [next, undefined];
-      }),
+        return [next, true];
+      });
+      if (restored) emitRestored('dance', dance.id);
+    },
     [update],
   );
 
@@ -126,12 +139,53 @@ export function DanceProvider({ children }: { children: ReactNode }) {
   const importJson = useCallback(
     async (json: string) => {
       const parsed = parseDanceJson(json, { untitled: tRef.current.common.untitled }); // throws a DanceValidationError
+      // credit only comes from a saved link or class, never from pasted text (it could be made up)
+      delete parsed.source;
       return update((cur) => {
         const now = Date.now();
         const d: Dance = { ...parsed, createdAt: now, updatedAt: now };
         return [[d, ...cur], d];
       });
     },
+    [update],
+  );
+
+  const applyRemote = useCallback(
+    ({ upserts, deletedIds }: RemoteChanges) =>
+      update<string[]>((cur) => {
+        const skipped: string[] = [];
+        let next = cur;
+        const edit = () => (next === cur ? (next = [...cur]) : next);
+        for (const u of upserts) {
+          let d: Dance;
+          try {
+            d = parseDance(u.data, { keepId: true, untitled: tRef.current.common.untitled });
+          } catch (e) {
+            console.warn('Skipping an unreadable dance from the cloud:', e instanceof Error ? e.message : e);
+            skipped.push(u.id);
+            continue;
+          }
+          if (d.id !== u.id || BUILT_IN_IDS.has(d.id)) {
+            skipped.push(u.id);
+            continue;
+          }
+          d.updatedAt = u.updatedAt;
+          const i = next.findIndex((c) => c.id === d.id);
+          if (i >= 0) {
+            if (next[i].updatedAt > d.updatedAt) continue; // edited here meanwhile: keep ours
+            edit()[i] = d;
+          } else {
+            // newest first, by creation
+            const at = next.findIndex((c) => c.createdAt < d.createdAt);
+            edit().splice(at < 0 ? next.length : at, 0, d);
+          }
+        }
+        if (deletedIds.length) {
+          const gone = new Set(deletedIds);
+          if (next.some((c) => gone.has(c.id))) next = next.filter((c) => !gone.has(c.id));
+        }
+        return [next, skipped];
+      }),
     [update],
   );
 
@@ -149,8 +203,9 @@ export function DanceProvider({ children }: { children: ReactNode }) {
       restore,
       duplicate,
       importJson,
+      applyRemote,
     };
-  }, [custom, t, ready, save, remove, restore, duplicate, importJson]);
+  }, [custom, t, ready, save, remove, restore, duplicate, importJson, applyRemote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -175,9 +230,12 @@ export function newDance(): Dance {
   };
 }
 
-/** Strip internal fields before sharing. */
+/**
+ * Strip internal fields before sharing as text: `builtIn`, and `source` (credit is only set by
+ * saving from a link or class; pasted text never carries it, see `importJson`).
+ */
 export function exportJson(d: Dance) {
-  const { builtIn: _b, ...rest } = d;
+  const { builtIn: _b, source: _s, ...rest } = d;
   return JSON.stringify({ app: 'waltzy', version: 1, ...rest }, null, 2);
 }
 

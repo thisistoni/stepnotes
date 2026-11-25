@@ -1,5 +1,6 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState, type ComponentRef, type ReactNode, type Ref } from 'react';
+import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
+import { use, useCallback, useEffect, useState, type ComponentRef, type ReactNode, type Ref } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -74,12 +75,16 @@ export function Screen({
   const kb = useKeyboardOpen();
   const [footerH, setFooterH] = useState(0);
   const registerInset = useToastInset();
-  const chrome = footer ? footerH : fab ? FAB_HEIGHT + space.l : 0;
+  // inside the tab bar: it already keeps clear of the home indicator, and toasts go above it
+  const tabBarH = use(BottomTabBarHeightContext);
+  const inTabs = tabBarH !== undefined;
+  // (the toast host adds the bottom safe area itself; the tab bar's height includes it)
+  const chrome = (footer ? footerH : fab ? FAB_HEIGHT + space.l : 0) + (tabBarH ? Math.max(0, tabBarH - insets.bottom) : 0);
   useFocusEffect(
     useCallback(() => registerInset?.(chrome), [chrome, registerInset]),
   );
 
-  const bottomSafe = kb ? space.m : Math.max(insets.bottom, space.l);
+  const bottomSafe = kb ? space.m : inTabs ? space.l : Math.max(insets.bottom, space.l);
   const gutter = padded ? space.gutter : 0;
   const scrollBottom = footer ? space.xl : bottomSafe + space.xl + (fab ? FAB_HEIGHT + space.l : 0);
 

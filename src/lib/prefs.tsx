@@ -4,11 +4,11 @@
  *   const { ready, prefs, set } = usePrefs();
  *   prefs.speed        // last used tempo multiplier (0.25–2, default 0.75)
  *   set({ loop: false })   // merge a patch; resolves when persisted
- *   prefs.language     // 'de' | 'en' (see '@/lib/i18n')
+ *   prefs.language     // 'de' | 'en' once the user picked one, null = follow the device (see '@/lib/i18n')
  */
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
 
-import { DEFAULT_LANGUAGE, isLanguage, type Language } from './i18n/languages';
+import { isLanguage, type Language } from './i18n/languages';
 import { usePersistedValue } from './persist';
 import type { Role } from './types';
 
@@ -28,8 +28,8 @@ export interface Prefs {
   speakCounts: boolean;
   /** Show L / R on the footprints */
   showLetters: boolean;
-  /** App language */
-  language: Language;
+  /** App language the user picked; null = the device language (`DEFAULT_LANGUAGE`) */
+  language: Language | null;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -40,7 +40,7 @@ export const DEFAULT_PREFS: Prefs = {
   haptics: true,
   speakCounts: false,
   showLetters: true,
-  language: DEFAULT_LANGUAGE,
+  language: null,
 };
 
 export const SPEED_RANGE = [0.25, 2] as const;

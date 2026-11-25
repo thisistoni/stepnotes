@@ -8,12 +8,13 @@
  * Rules: unknown keys are dropped; strings are trimmed and length-capped; numbers must be finite
  * (numeric strings are accepted) and are clamped into sane ranges (bpm 20–300, beats/bar 1–12,
  * positions ±50, a step's optional `pivot` ±720°, dropped when it is not a number); a step's length must be > 0; `videoUrl` is kept only if it is http(s);
+ * `source` (credit) is kept only when complete (kind share | class, a ref; author ≤ 40 chars);
  * missing or duplicate step ids are generated. Anything that cannot be repaired throws a
  * `DanceValidationError`; show `err.localized(t)` to the user (`message` is English, for logs).
  */
 import { en, type Strings } from './i18n/en';
 import { DEFAULT_START, uid } from './pattern';
-import type { Dance, Foot, FootPos, FootStyle, Pattern, Role, Step, StepKind } from './types';
+import type { Dance, DanceSource, Foot, FootPos, FootStyle, Pattern, Role, Step, StepKind } from './types';
 
 /** Where a problem is: e.g. { role: 'leader', step: 3 } → "Leader part, step 3". Empty = whole document. */
 export interface ValidationWhere {
@@ -62,6 +63,8 @@ export const LIMITS = {
   note: 500,
   count: 8,
   url: 2000,
+  author: 40,
+  ref: 100,
   steps: 500,
   coord: 50,
   pivot: 720,
@@ -196,6 +199,15 @@ function videoUrl(v: unknown): string | undefined {
   }
 }
 
+/** Credit of a saved dance; dropped (not an error) when it is incomplete. */
+function sourceOf(v: unknown): DanceSource | undefined {
+  if (!isObject(v) || (v.kind !== 'share' && v.kind !== 'class')) return undefined;
+  const text = (x: unknown, max: number) => (typeof x === 'string' ? x.trim().slice(0, max) : '');
+  const ref = text(v.ref, LIMITS.ref);
+  if (!ref) return undefined;
+  return { kind: v.kind, ref, author: text(v.author, LIMITS.author), authorId: text(v.authorId, LIMITS.ref) };
+}
+
 function timestamp(v: unknown, fallback: number) {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback;
 }
@@ -235,6 +247,8 @@ export function parseDance(input: unknown, options: ParseOptions = {}): Dance {
   }
   const url = videoUrl(input.videoUrl);
   if (url) dance.videoUrl = url;
+  const source = sourceOf(input.source);
+  if (source) dance.source = source;
   return dance;
 }
 

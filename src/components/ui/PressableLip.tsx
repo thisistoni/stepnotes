@@ -128,6 +128,7 @@ export function LipSurface({
   style,
   faceStyle,
   children,
+  testID,
 }: {
   colors?: LipColors;
   radius?: number;
@@ -135,9 +136,10 @@ export function LipSurface({
   style?: StyleProp<ViewStyle>;
   faceStyle?: StyleProp<ViewStyle>;
   children?: ReactNode;
+  testID?: string;
 }) {
   return (
-    <View style={style}>
+    <View style={style} testID={testID}>
       {lipDepth > 0 && (
         <View style={[StyleSheet.absoluteFill, { top: lipDepth, backgroundColor: colors.lip, borderRadius: radius }]} />
       )}
