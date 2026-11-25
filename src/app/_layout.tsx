@@ -17,8 +17,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ErrorScreen } from '@/components/ErrorScreen';
 import { ConfirmHost, ToastHost } from '@/components/ui';
 import { AuthProvider } from '@/lib/cloud/auth';
+import { CollectionSync } from '@/lib/cloud/CollectionSync';
 import { DanceSync } from '@/lib/cloud/DanceSync';
 import { SyncProvider } from '@/lib/cloud/sync';
+import { CollectionsProvider } from '@/lib/collections';
 import { I18nProvider } from '@/lib/i18n';
 import { PrefsProvider, usePrefs } from '@/lib/prefs';
 import { DanceProvider, useDances } from '@/lib/store';
@@ -55,18 +57,21 @@ export default function RootLayout() {
         {/* the language comes from prefs, which are loaded before anything renders (no flash) */}
         <I18nProvider>
           <DanceProvider>
-            {/* accounts and the library backup (local-first: the app works without them) */}
-            <AuthProvider>
-              <SyncProvider>
-                <DanceSync />
-                <ToastHost>
-                  <ConfirmHost>
-                    <StatusBar style="dark" />
-                    <AppStack fontsReady={fontsLoaded || !!fontError} />
-                  </ConfirmHost>
-                </ToastHost>
-              </SyncProvider>
-            </AuthProvider>
+            <CollectionsProvider>
+              {/* accounts and the library backup (local-first: the app works without them) */}
+              <AuthProvider>
+                <SyncProvider>
+                  <DanceSync />
+                  <CollectionSync />
+                  <ToastHost>
+                    <ConfirmHost>
+                      <StatusBar style="dark" />
+                      <AppStack fontsReady={fontsLoaded || !!fontError} />
+                    </ConfirmHost>
+                  </ToastHost>
+                </SyncProvider>
+              </AuthProvider>
+            </CollectionsProvider>
           </DanceProvider>
         </I18nProvider>
       </PrefsProvider>

@@ -152,6 +152,18 @@ const ICONS = {
     { d: 'M13.5 3.5V9H19' },
     { d: 'M8.5 13h7M8.5 16.5h5' },
   ],
+  // a stack of cards: a collection of dances
+  stack: [
+    { d: 'M8.5 4h7' },
+    { d: 'M6.5 7h11' },
+    { d: 'M4.5 12a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z' },
+  ],
+  'stack-plus': [
+    { d: 'M8.5 4h7' },
+    { d: 'M6.5 7h11' },
+    { d: 'M4.5 12a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z' },
+    { d: 'M12 12.5v5M9.5 15h5' },
+  ],
   shield: [{ d: 'M12 3.5l7 2.8v5.2c0 4.4-3 7.8-7 9-4-1.2-7-4.6-7-9V6.3z' }, { d: 'M9 12l2.2 2.2L15.5 10' }],
   'flat-shoe': foot(SHOE_PARTS, 'translate(12 12) rotate(12) scale(6.9)', 0.18),
   heel: foot(HEEL_PARTS, 'translate(12 12) rotate(12) scale(6.9)', 0.18),

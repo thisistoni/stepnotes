@@ -1,15 +1,24 @@
 import { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { DiagramThumb, PressableLip, Skeleton, StyleBadge, Text } from '@/components/ui';
+import { DiagramThumb, Icon, PressableLip, Skeleton, StyleBadge, Text } from '@/components/ui';
 import { useT } from '@/lib/i18n';
-import { DEFAULT_FOOT_STYLE, lip, radius, space, styleColor } from '@/lib/theme';
+import { colors, DEFAULT_FOOT_STYLE, lip, radius, space, styleColor, withAlpha } from '@/lib/theme';
 import type { Dance } from '@/lib/types';
 
 const TILE_H = 112;
 
+export interface DanceCardProps {
+  dance: Dance;
+  onOpen: (id: string) => void;
+  /** long press: the card's menu (add to a collection …) */
+  onLongPress?: (id: string) => void;
+  /** shows a small "…" button on the tile that opens the card's menu (inside a collection) */
+  onMore?: (id: string) => void;
+}
+
 /** Library card: tinted thumbnail tile with the style badge, title (2 lines max) and meta. */
-export const DanceCard = memo(function DanceCard({ dance, onOpen }: { dance: Dance; onOpen: (id: string) => void }) {
+export const DanceCard = memo(function DanceCard({ dance, onOpen, onLongPress, onMore }: DanceCardProps) {
   const t = useT();
   const tone = styleColor(dance.style);
   const name = dance.name.trim() || t.common.untitled;
@@ -17,6 +26,11 @@ export const DanceCard = memo(function DanceCard({ dance, onOpen }: { dance: Dan
   return (
     <PressableLip
       onPress={() => onOpen(dance.id)}
+      onLongPress={onLongPress ? () => onLongPress(dance.id) : undefined}
+      delayLongPress={450}
+      // screen readers: the long press as a named action
+      accessibilityActions={onLongPress ? [{ name: 'longpress', label: t.player.more }] : undefined}
+      onAccessibilityAction={onLongPress ? (e) => e.nativeEvent.actionName === 'longpress' && onLongPress(dance.id) : undefined}
       radius={radius.card}
       lipDepth={lip.lg}
       accessibilityLabel={[name, dance.style.trim(), meta].filter(Boolean).join(', ')}
@@ -32,7 +46,19 @@ export const DanceCard = memo(function DanceCard({ dance, onOpen }: { dance: Dan
           footStyle={dance.footStyle?.leader ?? DEFAULT_FOOT_STYLE.leader}
           style={s.thumb}
         />
-        <StyleBadge style={dance.style} small sx={s.badge} />
+        <StyleBadge style={dance.style} small sx={[s.badge, !!onMore && s.badgeNarrow]} />
+        {onMore && (
+          <Pressable
+            onPress={() => onMore(dance.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t.collections.cardMore(name)}
+            hitSlop={8}
+            style={({ pressed }) => [s.more, pressed && s.morePressed]}
+            testID={`dance-more-${dance.id}`}
+          >
+            <Icon name="more" size={18} color={tone.deep} strokeWidth={2.6} />
+          </Pressable>
+        )}
       </View>
       <View style={s.text}>
         {/* three lines: German starter names ("Bachata Grundschritt seitwärts") must not be cut */}
@@ -66,6 +92,20 @@ const s = StyleSheet.create({
   tile: { height: TILE_H, borderRadius: 18, overflow: 'hidden' },
   thumb: { position: 'absolute', left: 10, right: 10, top: 26, bottom: 6 },
   badge: { position: 'absolute', left: 8, top: 8, maxWidth: '85%' },
+  badgeNarrow: { maxWidth: '62%' },
+  // 34 visible + 8 slop each side ≥ 44 touch target
+  more: {
+    position: 'absolute',
+    right: 5,
+    top: 5,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: withAlpha(colors.card, 0.85),
+  },
+  morePressed: { backgroundColor: colors.card },
   text: { paddingHorizontal: space.xs, paddingTop: space.s + 2 },
   meta: { marginTop: 3 },
   skeleton: { padding: space.xs, paddingBottom: space.m + lip.lg },
