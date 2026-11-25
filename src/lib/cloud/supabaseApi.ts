@@ -8,7 +8,7 @@
  * - `dance` / `data` values are passed through untouched: callers validate them.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient, isAuthError, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { createClient, isAuthError, type RealtimeChannel, type SupabaseClient, type User } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import { AppState, Platform } from 'react-native';
 
@@ -145,6 +145,8 @@ const POST_COLS = 'id, name, note, dance, created_at, updated_at';
 const PAGE = 1000;
 /** `push_library_items` takes at most 200; we send 100 at a time. */
 const PUSH_CHUNK = 100;
+/** every live subscription gets its own channel (a topic that is still closing cannot be reused) */
+let liveChannels = 0;
 
 // --- the API -----------------------------------------------------------------------------------
 
@@ -295,6 +297,32 @@ export const supabaseApi: CloudApi = {
       }));
       await run(sb().rpc('push_library_items', { items: chunk }));
     }
+  },
+
+  onLibraryChange(cb) {
+    // Realtime tells this device when one of its owner's rows changed (another device pushed).
+    // Only a nudge: the sync engine then pulls as usual. Row level security applies, so nobody
+    // hears about someone else's library.
+    let channel: RealtimeChannel | null = null;
+    let stopped = false;
+    requireUser()
+      .then((user) => {
+        if (stopped) return;
+        channel = sb()
+          .channel(`library:${user.id}:${++liveChannels}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'library_items', filter: `owner=eq.${user.id}` }, () => cb())
+          // the feed is ready (also again after a dropped connection): what changed while it was
+          // not listening would be missed, so nudge once
+          .on('system', {}, (m: { extension?: string; status?: string }) => {
+            if (m.extension === 'postgres_changes' && m.status === 'ok') cb();
+          })
+          .subscribe();
+      })
+      .catch(() => {});
+    return () => {
+      stopped = true;
+      if (channel) void sb().removeChannel(channel);
+    };
   },
 
   async publishShare(danceId, name, dance) {

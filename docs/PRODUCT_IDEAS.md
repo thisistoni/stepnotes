@@ -37,7 +37,6 @@ The strongest first market is probably **teachers → students**. A teacher brin
 - Count-in before playback starts.
 - Tap tempo (tap along to set the bpm).
 - Personalised onboarding questions (e.g. "I'm learning / I teach / I choreograph", favourite styles).
-- A "Paste" button on the import screen on phones (it needs a clipboard module; today you paste into the field).
 - Redo in the editor (undo exists).
 
 **Later**

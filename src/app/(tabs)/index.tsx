@@ -14,7 +14,7 @@ import { NoMatches } from '@/components/library/NoMatches';
 import { SectionHeader } from '@/components/library/SectionHeader';
 import { StyleFilterChips } from '@/components/library/StyleFilterChips';
 import { matches, useStyleFilters } from '@/components/library/useLibrary';
-import { Entrance, Fab, Header, IconButton, Menu, Screen, SearchField, useToast, type MenuItem } from '@/components/ui';
+import { Entrance, Fab, Header, Menu, Screen, SearchField, useToast, type MenuItem } from '@/components/ui';
 import { presentDances, useCollections, type Collection } from '@/lib/collections';
 import { errorText, useT } from '@/lib/i18n';
 import { useDances } from '@/lib/store';
@@ -139,12 +139,7 @@ export default function Library() {
 
   return (
     <Screen padded={false} fab={fab} testID="library">
-      <Header
-        large
-        eyebrow="Waltzy"
-        title={t.library.title}
-        right={<IconButton icon="import" label={t.library.import} onPress={() => router.push('/import')} testID="import-button" />}
-      />
+      <Header large eyebrow="Waltzy" title={t.library.title} />
       <Entrance index={0} style={s.px}>
         <SearchField
           value={query}

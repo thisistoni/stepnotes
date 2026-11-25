@@ -21,7 +21,10 @@ function lastSyncedText(t: Strings, at: number | null, now: number) {
   return t.sync.at(when);
 }
 
-/** Backup status on the Me tab: when, a readable error, "Back up now". */
+/**
+ * Backup status on the Me tab. The backup runs by itself (see sync.tsx), so this only reports:
+ * when it last ran, or a readable error with "Try again".
+ */
 export function BackupCard() {
   const t = useT();
   const { status, lastSyncedAt, error, syncNow } = useSync();
@@ -34,7 +37,8 @@ export function BackupCard() {
   const failed = status === 'error';
   const syncing = status === 'syncing';
   const tone = failed ? TONE.danger : TONE.primary;
-  const title = syncing ? t.sync.syncing : failed ? t.sync.error : lastSyncedText(t, lastSyncedAt, Math.max(now, lastSyncedAt ?? 0));
+  // "Backing up…" only for the first backup: the quiet checks in the background do not flicker
+  const title = failed ? t.sync.error : syncing && !lastSyncedAt ? t.sync.syncing : lastSyncedText(t, lastSyncedAt, Math.max(now, lastSyncedAt ?? 0));
   return (
     <Card testID="backup-card">
       <View style={s.row}>
@@ -61,16 +65,9 @@ export function BackupCard() {
           )}
         </View>
       </View>
-      <Button
-        label={failed ? t.cloud.retry : t.sync.now}
-        variant="secondary"
-        size="sm"
-        icon="rotate-right"
-        loading={syncing}
-        onPress={() => void syncNow()}
-        style={s.button}
-        testID="sync-now"
-      />
+      {failed && (
+        <Button label={t.cloud.retry} variant="secondary" size="sm" icon="rotate-right" onPress={() => void syncNow()} style={s.button} testID="sync-retry" />
+      )}
     </Card>
   );
 }

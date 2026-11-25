@@ -9,7 +9,6 @@ import { useCallback, useRef, useState } from 'react';
 import { DanceNotFound } from '@/components/DanceNotFound';
 import { AddToCollectionSheet } from '@/components/library/AddToCollectionSheet';
 import { PlayerView, type PlayerHandle } from '@/components/player/PlayerView';
-import { shareDance } from '@/components/player/shareDance';
 import { ShareSheet } from '@/components/social/ShareSheet';
 import { goBackOrHome, Header, IconButton, Menu, Screen, useConfirm, useToast, type MenuItem } from '@/components/ui';
 import { errorText, useT } from '@/lib/i18n';
@@ -50,8 +49,7 @@ function DancePlayer({ dance, onLeaving, openShare }: { dance: Dance; onLeaving:
   }, [pause, dance.id]);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  // starter dances are on every phone already: they are only shared as text
-  const [shareOpen, setShareOpen] = useState(openShare && !builtIn);
+  const [shareOpen, setShareOpen] = useState(openShare);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const name = dance.name.trim() || t.common.untitled;
   const onDuplicate = async () => {
@@ -91,17 +89,13 @@ function DancePlayer({ dance, onLeaving, openShare }: { dance: Dance; onLeaving:
       toast.show({ message: (tr) => errorText(e, tr, tr.player.deleteFailed), icon: 'alert' });
     }
   };
-  const onShare = () => {
-    if (builtIn) void shareDance(dance, t, toast.show);
-    else setShareOpen(true);
-  };
   const menuItems: MenuItem[] = [
     builtIn
       ? { key: 'own', label: t.player.makeOwn, hint: t.player.makeOwnHint, icon: 'pencil', onPress: makeOwn }
       : { key: 'edit', label: t.player.editSteps, icon: 'pencil', onPress: edit },
     { key: 'dup', label: t.player.duplicate, hint: t.player.duplicateHint, icon: 'copy', onPress: onDuplicate },
     { key: 'collect', label: t.collections.addTo, hint: t.collections.addToHint, icon: 'stack-plus', onPress: () => setCollectionOpen(true) },
-    { key: 'share', label: t.player.share, hint: builtIn ? t.player.shareHint : t.player.shareLinkHint, icon: 'share', onPress: onShare },
+    { key: 'share', label: t.player.share, hint: t.player.shareLinkHint, icon: 'share', onPress: () => setShareOpen(true) },
     ...(builtIn ? [] : [{ key: 'del', label: t.player.delete, icon: 'trash' as const, destructive: true, onPress: onDelete }]),
   ];
 
@@ -121,7 +115,7 @@ function DancePlayer({ dance, onLeaving, openShare }: { dance: Dance; onLeaving:
     >
       <Menu visible={menuOpen} onClose={() => setMenuOpen(false)} title={name} items={menuItems} />
       <AddToCollectionSheet danceId={dance.id} visible={collectionOpen} onClose={() => setCollectionOpen(false)} />
-      {!builtIn && <ShareSheet visible={shareOpen} onClose={() => setShareOpen(false)} dance={dance} onBeforeLeave={pause} />}
+      <ShareSheet visible={shareOpen} onClose={() => setShareOpen(false)} dance={dance} onBeforeLeave={pause} />
     </PlayerView>
   );
 }

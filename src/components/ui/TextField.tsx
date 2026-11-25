@@ -18,8 +18,6 @@ export interface TextFieldProps extends Omit<TextInputProps, 'style' | 'placehol
   clearable?: boolean;
   /** Minimum height for multiline fields (default 120) */
   minHeight?: number;
-  /** Monospace text (pasted JSON) */
-  mono?: boolean;
   ref?: Ref<ComponentRef<typeof TextInput>>;
   /** Outer box */
   style?: StyleProp<ViewStyle>;
@@ -37,7 +35,6 @@ export function TextField({
   clearable,
   multiline,
   minHeight = 120,
-  mono,
   value,
   onChangeText,
   onFocus,
@@ -92,7 +89,6 @@ export function TextField({
           maxFontSizeMultiplier={1.35}
           style={[
             s.input,
-            mono && s.mono,
             multiline && { minHeight: minHeight - 26, textAlignVertical: 'top', paddingTop: 0 },
             WEB_NO_OUTLINE,
           ]}
@@ -166,7 +162,6 @@ const s = StyleSheet.create({
     color: colors.ink,
     paddingVertical: 0,
   },
-  mono: { fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }), fontSize: 13 },
   clear: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', marginRight: -4 },
   msgRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 8, marginLeft: 4 },
   msg: { flex: 1 },

@@ -23,9 +23,11 @@
  *   '@/lib/libraryEvents' in its remove / undo. Nothing else ever deletes a cloud copy.
  * - `ready`: false until the store has loaded (an empty list before loading is not "no items").
  *
- * When: after sign-in, on start when signed in, when the app comes to the foreground / the
- * browser comes online, 3 s after a local change, and on `syncNow()`. Errors back off
- * (5 s, 15 s, 1 min, 5 min).
+ * When: always by itself, the user never starts it. After sign-in, on start when signed in, when
+ * the app comes to the foreground / the browser comes online, shortly after a local change, as
+ * soon as another device changed the library (`cloud.onLibraryChange`, live) and once a minute
+ * while the app is open (in case the live channel is down). Errors back off (5 s, 15 s, 1 min,
+ * 5 min); `syncNow()` is only the "Try again" of a failed backup.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform } from 'react-native';
@@ -53,7 +55,7 @@ export interface SyncState {
   lastSyncedAt: number | null;
   /** the last error while `status` is 'error' (show `cloudErrorText(error, t)`) */
   error: CloudError | null;
-  /** Sync right away (resolves when done; never rejects). */
+  /** Sync right away: the "Try again" of a failed backup (resolves when done; never rejects). */
   syncNow: () => Promise<void>;
 }
 
@@ -71,7 +73,12 @@ const Ctx = createContext<Engine | null>(null);
 
 /** Pull again from a few seconds before the newest row we saw (clock skew, slow commits). */
 const OVERLAP_MS = 5000;
-const DEBOUNCE_MS = 3000;
+/** after a local change (dances are saved explicitly, so this only gathers quick taps) */
+const DEBOUNCE_MS = 1500;
+/** after a live "the cloud changed" nudge (a push of several rows arrives as several nudges) */
+const LIVE_MS = 400;
+/** the fallback while the app is open */
+const POLL_MS = 60000;
 const BACKOFF_S = [5, 15, 60, 300];
 
 const signatureOf = (items: LocalItem[]) =>
@@ -252,8 +259,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   }, [ready, userId, run]);
 
   // foreground / back online
+  const [foreground, setForeground] = useState(() => AppState.currentState !== 'background');
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
+      setForeground(s !== 'background');
       if (s === 'active') schedule(0);
     });
     const online = () => schedule(0);
@@ -263,6 +272,18 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       if (Platform.OS === 'web' && typeof window !== 'undefined') window.removeEventListener('online', online);
     };
   }, [schedule]);
+
+  // while the app is open: pull as soon as another device changed the library, and once a minute
+  // anyway (the live channel is best effort)
+  useEffect(() => {
+    if (!ready || !userId || !foreground) return;
+    const stop = cloud.onLibraryChange(() => schedule(LIVE_MS));
+    const poll = setInterval(() => schedule(0), POLL_MS);
+    return () => {
+      stop();
+      clearInterval(poll);
+    };
+  }, [ready, userId, foreground, schedule]);
 
   // explicit deletions and undos → tombstones (only once this device has ever been signed in)
   useEffect(

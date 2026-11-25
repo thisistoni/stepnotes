@@ -2,12 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, typ
 
 import { BUILT_IN_IDS, builtInDances } from './builtins';
 import type { RemoteChanges } from './cloud/sync';
-import { useT, type Strings } from './i18n';
+import { useT } from './i18n';
 import { emitRemoved, emitRestored } from './libraryEvents';
 import { DEFAULT_START, uid } from './pattern';
 import { usePersistedValue } from './persist';
 import type { Dance } from './types';
-import { parseDance, parseDanceJson } from './validate';
+import { parseDance } from './validate';
 
 /** Keep this key: existing installs (and the web QA harness) store user dances under it. */
 export const STORAGE_KEY = 'waltzy.dances.v1';
@@ -33,8 +33,6 @@ export interface DanceStore {
   restore: (dance: Dance) => Promise<void>;
   /** Copy any dance (built-in or not) into "My dances". Default name: "<name> (my version)", localised. */
   duplicate: (dance: Dance, name?: string) => Promise<Dance>;
-  /** Parse pasted text and add it. Throws `DanceValidationError` with a user-facing message. */
-  importJson: (json: string) => Promise<Dance>;
   /**
    * Write changes from the cloud backup (the sync engine calls this). Remote data is validated;
    * an unreadable dance is skipped (its id is returned), a local dance that is newer is kept.
@@ -136,20 +134,6 @@ export function DanceProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
-  const importJson = useCallback(
-    async (json: string) => {
-      const parsed = parseDanceJson(json, { untitled: tRef.current.common.untitled }); // throws a DanceValidationError
-      // credit only comes from a saved link or class, never from pasted text (it could be made up)
-      delete parsed.source;
-      return update((cur) => {
-        const now = Date.now();
-        const d: Dance = { ...parsed, createdAt: now, updatedAt: now };
-        return [[d, ...cur], d];
-      });
-    },
-    [update],
-  );
-
   const applyRemote = useCallback(
     ({ upserts, deletedIds }: RemoteChanges) =>
       update<string[]>((cur) => {
@@ -202,10 +186,9 @@ export function DanceProvider({ children }: { children: ReactNode }) {
       remove,
       restore,
       duplicate,
-      importJson,
       applyRemote,
     };
-  }, [custom, t, ready, save, remove, restore, duplicate, importJson, applyRemote]);
+  }, [custom, t, ready, save, remove, restore, duplicate, applyRemote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -228,18 +211,4 @@ export function newDance(): Dance {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
-}
-
-/**
- * Strip internal fields before sharing as text: `builtIn`, and `source` (credit is only set by
- * saving from a link or class; pasted text never carries it, see `importJson`).
- */
-export function exportJson(d: Dance) {
-  const { builtIn: _b, source: _s, ...rest } = d;
-  return JSON.stringify({ app: 'waltzy', version: 1, ...rest }, null, 2);
-}
-
-/** The text a share sends: one friendly line, then the dance (import ignores the text around it). */
-export function shareText(d: Dance, t: Strings) {
-  return `${t.share.prefix}\n\n${exportJson(d)}`;
 }

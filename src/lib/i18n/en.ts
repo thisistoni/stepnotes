@@ -150,7 +150,6 @@ export const en = {
 
   library: {
     title: 'Your dances',
-    import: 'Import a dance',
     create: 'Create',
     searchPlaceholder: 'Search dances or styles',
     myDances: 'My dances',
@@ -230,7 +229,6 @@ export const en = {
     duplicate: 'Duplicate',
     duplicateHint: 'Save a copy to My dances',
     share: 'Share',
-    shareHint: 'Send it as text',
     shareLinkHint: 'Send a link or a QR code',
     delete: 'Delete',
     copied: 'Copy saved to My dances',
@@ -321,11 +319,7 @@ export const en = {
   },
 
   share: {
-    /** First line of a shared dance (the import ignores text around the dance) */
-    prefix: 'A Waltzy dance. Copy all of this text and paste it into Waltzy under Import:',
     failed: 'Could not open sharing. Please try again.',
-    copied: 'Dance copied. Paste it into a message to share it.',
-    unsupported: 'This browser cannot share or copy. Open Waltzy on your phone to share.',
     /** The one line sent with a link (system share sheet) */
     linkMessage: (name: string, url: string) => `Here’s ${q(name)} on Waltzy. Open the link to watch it and save a copy: ${url}`,
     classMessage: (name: string, url: string) => `Join my dance class ${q(name)} on Waltzy: ${url}`,
@@ -368,8 +362,6 @@ export const en = {
     stopTitle: (name: string) => `Stop sharing ${q(name)}?`,
     stopMessage: 'The link stops working. People who already saved a copy keep it.',
     stopped: 'Sharing stopped. The link no longer works.',
-    asText: 'Share as text instead',
-    asTextHint: 'Works without an account or internet',
     signInTitle: 'Sign in to share a link',
     signInBody: 'A link belongs to your account, so you can update it or stop it later. Sign in with Apple or Google, no new password.',
     signIn: 'Sign in',
@@ -700,22 +692,7 @@ export const en = {
     edgeTip: 'More room? Drag the floor',
   },
 
-  import: {
-    title: 'Import a dance',
-    submit: 'Add to my dances',
-    intro: 'Paste a dance someone shared with you. Extra text around it, like a chat message, is fine.',
-    field: 'Shared dance',
-    paste: 'Paste',
-    preview: (name: string, style: string, steps: number, follower: boolean) =>
-      `Ready to add ${q(name)} · ${[style, pl(steps, { one: '# step', other: '# steps' }), follower ? 'leader + follower' : ''].filter(Boolean).join(' · ')}`,
-    notADance: 'That doesn’t look like a Waltzy dance. Ask the sender to share it again.',
-    added: (name: string) => `${q(name)} added to your dances`,
-    saveFailed: 'Could not save this dance. Please try again.',
-    clipboardEmpty: 'The clipboard is empty',
-    clipboardFailed: 'Could not read the clipboard. Paste into the field instead.',
-  },
-
-  /** Problems in pasted or stored dances (technical field names stay as they are in the data) */
+  /** Problems in received or stored dances (technical field names stay as they are in the data) */
   validation: {
     where: (w: ValidationWhere) =>
       [w.role ? `${w.role} part` : '', w.start ? 'start position' : '', w.step ? `step ${w.step}` : ''].filter(Boolean).join(', '),
@@ -734,9 +711,6 @@ export const en = {
     badBeats: '“beats” (the step length) must be greater than 0.',
     notADance: 'This does not look like a Waltzy dance.',
     noRoles: 'This does not look like a Waltzy dance (it has no steps).',
-    empty: 'Paste a dance first.',
-    noJson: 'This is not a Waltzy dance. A shared dance is a block of text that starts with { and ends with }.',
-    badJson: 'This text could not be read. It may have been cut off or changed: copy the whole shared text again, from { to }.',
   },
 
   /** Plain-language step descriptions, built from the step's structure (see `analyzeStep`) */
@@ -989,7 +963,7 @@ export const en = {
 
   /** Library backup status (Me tab) */
   sync: {
-    explain: 'Your dances are saved on this device and backed up to your account, so they also show up on your other devices.',
+    explain: 'Backup is automatic. Your dances are saved on this device and in your account, so they also show up on your other devices.',
     syncing: 'Backing up…',
     never: 'Not backed up yet',
     justNow: 'Backed up just now',
@@ -997,7 +971,6 @@ export const en = {
     at: (when: string) => `Last backup: ${when}`,
     error: 'Backup paused',
     retryHint: 'We’ll try again by ourselves. Your dances are safe on this device.',
-    now: 'Back up now',
   },
 
   /** Terms of use and privacy policy (drafts: the owner reviews them) */

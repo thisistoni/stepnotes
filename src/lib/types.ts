@@ -64,7 +64,7 @@ export interface Dance {
   /** Optional link to a reference video (YouTube, Instagram…) */
   videoUrl?: string;
   builtIn?: boolean;
-  /** Set on a dance that was saved from someone else's link or class (credit). Not part of a JSON export. */
+  /** Set on a dance that was saved from someone else's link or class (credit). Never sent with a shared link. */
   source?: DanceSource;
   createdAt: number;
   updatedAt: number;

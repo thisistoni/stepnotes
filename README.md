@@ -20,12 +20,11 @@ A mobile app (iOS and Android, built with Expo / React Native) for **learning an
   - *Chart*: the printed view with every position numbered, one chart per bar (short dances of up to three bars can also show all steps at once).
   - Leader, Follower or **Both** side by side, in sync.
   - Tempo 50–125 %, loop, spoken counts, mirror mode, L / R letters, and vibration on each step (phones only).
-  - Duplicate, share (a link with a QR code, or as text), delete (with undo).
+  - Duplicate, share (a link with a QR code), delete (with undo).
 - **Editor**: drag the feet on a grid, press and hold a foot to turn it (the toes follow your finger, in 15° steps; the ±15° buttons do the same), drag the empty floor to move the view (the crosshair shows everything again), and set each step's count, length (½ / 1 / 2 beats), foot, action (step, tap, hold) and a note. Generate the follower part as a mirror of the leader, then adjust it. Undo for every change. "Make my own version" of a starter dance opens the editor on a copy that is only saved when you press Save.
-- **Import**: paste a dance someone shared (extra chat text around it is fine).
-- **Tabs**: Library · Classes · Me. Player, editor, import, sign-in and the legal pages open above the tabs.
-- **Account (optional)**: everything works on the device without one. Signing in (e-mail + 6-digit code, no password) backs your dances up and brings them to your other devices. The Me tab shows the backup status, lets you change your name, sign out (dances stay) and delete the account, and lists your shared links and the people you blocked.
-- **Sharing** (needs an account to publish, never to receive): a dance gets a link and a QR code (update it after changes, or stop sharing). Anyone who opens the link sees the dance in the player, even on their very first visit (no intro first), and can save a copy with credit ("by Anna").
+- **Tabs**: Library · Classes · Me. Player, editor, sign-in and the legal pages open above the tabs.
+- **Account (optional)**: everything works on the device without one. Signing in (e-mail + 6-digit code, no password) backs your dances up and brings them to your other devices, by itself and live: there is no sync button. The Me tab shows the backup status, lets you change your name, sign out (dances stay) and delete the account, and lists your shared links and the people you blocked.
+- **Sharing** (needs an account to publish, never to receive): a dance, your own or a starter, gets a link and a QR code (update it after changes, or stop sharing). Anyone who opens the link sees the dance in the player, even on their very first visit (no intro first), and can save a copy with credit ("by Anna").
 - **Classes**: a teacher creates a class, posts dances with a note ("Week 3: the turn"), updates or removes them and invites students with a link, a code and a big QR code. Students join without an account (remembered on the device, joined in the account after signing in), watch and save the dances. The Classes tab lists the classes you teach and joined, also offline.
 - **Report and block**: every shared dance, class and class dance can be reported (four reasons); blocking a person hides their links and classes on this device.
 - **Languages**: German and English. The app follows the device language (German if the device is set to German, otherwise English) until you pick one under Me → Language or with DE | EN on the first intro screen; that choice is saved with the other settings.
@@ -62,7 +61,6 @@ src/
     c/[code].tsx          a class (public); c/[code]/[postId].tsx one of its dances; c/[code]/invite.tsx
     shared-links.tsx, blocked.tsx   Profile → My shared links / Blocked people
     edit/[id].tsx         editor ("new" creates a dance, ?from=<id> copies one)
-    import.tsx            paste a shared dance
   components/
     ui/                   design system: Text, PressableLip, Button, Segmented, Sheet, Toast…
     StepDiagram.tsx       the SVG diagram: animation, chart and touch editing
@@ -81,7 +79,7 @@ src/
     cloud/                backend seam, accounts, library sync (see Backend)
     libraryEvents.ts      explicit delete / undo events for the sync
     social/               blocked people, my shared links, my classes (device caches), links, saving with credit
-    validate.ts           checks imported and stored dances
+    validate.ts           checks received and stored dances
     i18n/                 German and English texts, useT(), plurals
     builtins.ts           starter dances
     theme.ts              colours, type, spacing
@@ -101,7 +99,7 @@ src/lib/cloud/
   fakeApi.ts      the same behaviour in AsyncStorage (`waltzy.fakecloud.v1`) for QA builds; code 123456
   index.ts        `cloud` (fake when EXPO_PUBLIC_CLOUD=fake), `cloudErrorText(e, t)`
   auth.tsx        AuthProvider, useAuth(), useRequireAccount()
-  sync.tsx        SyncProvider, useSync(), useSyncSource() (when to sync, I/O)
+  sync.tsx        SyncProvider, useSync(), useSyncSource() (when to sync, I/O; always automatic)
   merge.ts        the pure last-writer-wins decision (tested with a node script)
   syncMemory.ts   sync state on the device (`waltzy.sync.v1`)
   DanceSync.tsx   registers the user's dances with the engine
@@ -110,8 +108,8 @@ src/lib/cloud/
 - **Sign-in**: Sign in with Apple on iOS (`src/components/account/AppleSignIn.ios.tsx`; other platforms get the empty `AppleSignIn.tsx`) and Google everywhere (`cloud.signInWithGoogle`: Google's page in the system sign-in sheet on phones, a normal redirect on the web). In the Supabase dashboard this needs the Apple provider with the bundle id as client id, the Google provider with an OAuth client id and secret, and the redirect URLs `waltzy://sign-in` and `https://waltzy.antoniobeslic.com/sign-in`. The e-mail code flow is built but switched off (`EMAIL_SIGN_IN` in `src/lib/cloud/config.ts`): it needs a mail service on the backend. QA builds with the fake cloud keep it, so the check scripts still sign in with it.
 - **Screens never import Supabase**: everything goes through `cloud`. Every method rejects with a `CloudError`; show `cloudErrorText(e, t)`.
 - **Untrusted data**: `dance` / `data` from the cloud always goes through `parseDance` before it is shown or stored.
-- **Sync**: last writer wins per item on `updatedAt` (client ms), same rule as the database function `push_library_items`. Deletions are explicit: `DanceProvider.remove` / `restore` call `emitRemoved` / `emitRestored` (`src/lib/libraryEvents.ts`); an item that is merely missing locally never deletes the cloud copy. Built-in starter dances are never synced. Signing in as another person on the same device merges the local dances into that account.
-- **Credit** (`Dance.source`): kept in storage and in the backup, never in a JSON export, and dropped from pasted text on import (so it cannot be made up).
+- **Sync** runs by itself: after sign-in, on start, in the foreground, shortly after a local change, at once when another device changed the library (`cloud.onLibraryChange`: Supabase Realtime on `library_items`, only a nudge to pull) and once a minute while open. The Me tab only shows the status, with "Try again" after an error. Last writer wins per item on `updatedAt` (client ms), same rule as the database function `push_library_items`. Deletions are explicit: `DanceProvider.remove` / `restore` call `emitRemoved` / `emitRestored` (`src/lib/libraryEvents.ts`); an item that is merely missing locally never deletes the cloud copy. Built-in starter dances are never synced. Signing in as another person on the same device merges the local dances into that account.
+- **Credit** (`Dance.source`): kept in storage and in the backup, never sent with a shared link (`sharePayload`).
 - **Build with the fake** (all QA runs against it, the container cannot reach supabase.co):
 
   ```bash
@@ -133,7 +131,7 @@ To add a language: add its code to `LANGUAGES` in `languages.ts`, write `xx.ts` 
 
 A `Dance` has a name, style, tempo (bpm), beats per bar, a `leader` pattern and an optional `follower` pattern. A pattern is a **start position** for both feet plus a list of **steps**. Each step has a count label (`"1"`, `"&"`, …), a length in beats, which foot moves, an action (`step` takes the weight, `tap` touches without weight, `hold` pauses), where the foot ends up (`x`, `y`, `rot`) and optionally a `pivot`: how far the weight-bearing foot swivels on the spot meanwhile (spins, turns). The dancer faces up the screen at the start (after a turn, "forward" in the descriptions and the facing arrow follow the dancer) and one unit is about one foot width. Weight, animation, charts and descriptions are all calculated from this.
 
-Shared dances are this same structure as JSON text.
+A shared link and the backup carry this same structure as JSON.
 
 > The starter routines were researched figure by figure; the sources and the points a dance teacher should double-check are listed next to each dance in `src/lib/builtins.ts`.
 

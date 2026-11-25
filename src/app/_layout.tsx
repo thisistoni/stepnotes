@@ -128,7 +128,6 @@ function AppStack({ fontsReady }: { fontsReady: boolean }) {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="dance/[id]" />
             <Stack.Screen name="edit/[id]" />
-            <Stack.Screen name="import" options={{ presentation: 'modal' }} />
             <Stack.Screen name="sign-in" options={{ presentation: 'modal' }} />
             <Stack.Screen name="legal/terms" />
             <Stack.Screen name="legal/privacy" />

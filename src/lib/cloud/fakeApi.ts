@@ -216,6 +216,9 @@ export const fakeApi: CloudApi = {
         .map(({ owner: _o, ...r }): LibraryItem => copy(r));
     }),
 
+  // the fake has no live channel: the sync engine's slow poll finds what another "device" pushed
+  onLibraryChange: () => () => {},
+
   pushLibrary: (items) =>
     call((st, uid) => {
       const me = needUser(uid);

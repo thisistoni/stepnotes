@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { shareDance } from '@/components/player/shareDance';
 import { QrCode } from '@/components/QrCode';
 import { Button, Icon, Sheet, Skeleton, Text, useConfirm, useToast } from '@/components/ui';
 import { cloudErrorText } from '@/lib/cloud';
@@ -18,17 +17,17 @@ import { LinkBox } from './LinkBox';
 export interface ShareSheetProps {
   visible: boolean;
   onClose: () => void;
-  /** one of the user's own dances (never a starter) */
+  /** a dance from the library (the user's own or a starter) */
   dance: Dance;
   /** Called before the sheet navigates away (sign-in): pause the player */
   onBeforeLeave?: () => void;
 }
 
 /**
- * Share one of my dances. Signed in with a name: create the link, then show it with a QR code,
- * copy, the system share sheet, "Update link" when the dance changed since, and "Stop sharing".
- * Signed out: why a link needs an account and a sign-in button (the sheet opens again after
- * signing in). "Share as text instead" works in every state, offline and without an account.
+ * Share a dance from the library. Signed in with a name: create the link, then show it with a QR
+ * code, copy, the system share sheet, "Update link" when the dance changed since, and "Stop
+ * sharing". Signed out: why a link needs an account and a sign-in button (the sheet opens again
+ * after signing in).
  */
 export function ShareSheet({ visible, onClose, dance, onBeforeLeave }: ShareSheetProps) {
   const t = useT();
@@ -41,7 +40,7 @@ export function ShareSheet({ visible, onClose, dance, onBeforeLeave }: ShareShee
   const [busy, setBusy] = useState<'create' | 'update' | null>(null);
   const [checkError, setCheckError] = useState<unknown>(null);
   const [reopen, setReopen] = useState(false);
-  /** runs once the sheet is gone (confirm dialogs, navigation, the text share) */
+  /** runs once the sheet is gone (confirm dialogs, navigation) */
   const after = useRef<(() => void) | null>(null);
   const account = signedIn && !!profile?.displayName;
   const share = forDance(dance.id);
@@ -93,7 +92,6 @@ export function ShareSheet({ visible, onClose, dance, onBeforeLeave }: ShareShee
       onBeforeLeave?.();
       if (!requireAccount()) setReopen(true);
     });
-  const asText = () => closeThen(() => void shareDance(dance, t, toast.show));
   const stop = (id: string) =>
     closeThen(async () => {
       const ok = await confirm({
@@ -112,10 +110,6 @@ export function ShareSheet({ visible, onClose, dance, onBeforeLeave }: ShareShee
       }
     });
 
-  const textButton = (
-    <Button label={t.shareLink.asText} icon="document" variant="ghost" size="md" onPress={asText} accessibilityHint={t.shareLink.asTextHint} testID="share-as-text" />
-  );
-
   let body;
   if (!account) {
     body = (
@@ -130,7 +124,6 @@ export function ShareSheet({ visible, onClose, dance, onBeforeLeave }: ShareShee
           {t.shareLink.signInBody}
         </Text>
         <Button label={t.shareLink.signIn} icon="mail" onPress={signIn} style={s.mtl} testID="share-sign-in" />
-        {textButton}
       </View>
     );
   } else if (share) {
@@ -162,10 +155,7 @@ export function ShareSheet({ visible, onClose, dance, onBeforeLeave }: ShareShee
             {t.shareLink.updatedAt(t.time.ago(Date.parse(share.updatedAt)))}
           </Text>
         )}
-        <View>
-          {textButton}
-          <Button label={t.shareLink.stop} icon="close" variant="ghost" size="md" onPress={() => stop(share.id)} testID="share-stop" />
-        </View>
+        <Button label={t.shareLink.stop} icon="close" variant="ghost" size="md" onPress={() => stop(share.id)} testID="share-stop" />
       </View>
     );
   } else if (shares === null && !checkError) {
@@ -187,7 +177,6 @@ export function ShareSheet({ visible, onClose, dance, onBeforeLeave }: ShareShee
           </Text>
         )}
         <Button label={t.shareLink.create} icon="link" loading={busy === 'create'} onPress={() => create('create')} testID="share-create" />
-        {textButton}
       </View>
     );
   }

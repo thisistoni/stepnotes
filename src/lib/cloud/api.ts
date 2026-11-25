@@ -36,6 +36,7 @@ export interface CloudApi {
   // library sync
   pullLibrary(since: string | null): Promise<LibraryItem[]>;      // rows with server_updated_at > since, oldest first, all pages
   pushLibrary(items: LibraryPush[]): Promise<void>;               // chunks of ≤ 100
+  onLibraryChange(cb: () => void): () => void;                    // live: my library changed in the cloud (best effort; returns "stop")
   // shares
   publishShare(danceId: string, name: string, dance: unknown): Promise<MyShare>;   // creates or updates the dance's link
   listMyShares(): Promise<MyShare[]>;

@@ -1,9 +1,8 @@
 /**
  * Hand-written, dependency-free validation for dances coming from outside the app's own
- * editor: pasted/shared JSON and whatever is found in AsyncStorage.
+ * editor: shared links, class posts, the cloud backup and whatever is found in AsyncStorage.
  *
  *   parseDance(input: unknown, options?) => Dance        // throws DanceValidationError
- *   parseDanceJson(text: string, options?) => Dance      // JSON.parse + parseDance, friendly errors
  *
  * Rules: unknown keys are dropped; strings are trimmed and length-capped; numbers must be finite
  * (numeric strings are accepted) and are clamped into sane ranges (bpm 20–300, beats/bar 1–12,
@@ -250,23 +249,4 @@ export function parseDance(input: unknown, options: ParseOptions = {}): Dance {
   const source = sourceOf(input.source);
   if (source) dance.source = source;
   return dance;
-}
-
-/**
- * Parse text that someone pasted. Tolerates text around the JSON (e.g. a chat message that
- * says "here's the dance: {...}") and turns JSON syntax errors into a friendly message.
- */
-export function parseDanceJson(text: string, options: ParseOptions = {}): Dance {
-  const trimmed = text.trim();
-  if (!trimmed) throw new DanceValidationError((m) => m.empty);
-  const first = trimmed.indexOf('{');
-  const last = trimmed.lastIndexOf('}');
-  if (first < 0 || last <= first) throw new DanceValidationError((m) => m.noJson, {}, true);
-  let data: unknown;
-  try {
-    data = JSON.parse(trimmed.slice(first, last + 1));
-  } catch {
-    throw new DanceValidationError((m) => m.badJson);
-  }
-  return parseDance(data, options);
 }

@@ -191,7 +191,6 @@ export const de: Strings = {
 
   library: {
     title: 'Deine Tänze',
-    import: 'Tanz importieren',
     create: 'Neuer Tanz',
     searchPlaceholder: 'Tänze oder Stile suchen',
     myDances: 'Meine Tänze',
@@ -264,7 +263,6 @@ export const de: Strings = {
     duplicate: 'Duplizieren',
     duplicateHint: 'Speichert eine Kopie unter „Meine Tänze“',
     share: 'Teilen',
-    shareHint: 'Als Text verschicken',
     shareLinkHint: 'Als Link oder QR-Code verschicken',
     delete: 'Löschen',
     copied: 'Kopie unter „Meine Tänze“ gespeichert',
@@ -354,10 +352,7 @@ export const de: Strings = {
   },
 
   share: {
-    prefix: 'Ein Tanz für Waltzy. Kopier den ganzen Text und füg ihn in Waltzy unter „Importieren“ ein:',
     failed: 'Teilen hat nicht geklappt. Probier es bitte noch einmal.',
-    copied: 'Tanz kopiert. Füg ihn in eine Nachricht ein, um ihn zu teilen.',
-    unsupported: 'Dieser Browser kann weder teilen noch kopieren. Öffne Waltzy am Handy, um zu teilen.',
     linkMessage: (name: string, url: string) => `Schau dir ${q(name)} in Waltzy an. Über den Link kannst du ihn anschauen und dir speichern: ${url}`,
     classMessage: (name: string, url: string) => `Komm in meinen Tanzkurs ${q(name)} in Waltzy: ${url}`,
     copyLink: 'Link kopieren',
@@ -397,8 +392,6 @@ export const de: Strings = {
     stopTitle: (name: string) => `${q(name)} nicht mehr teilen?`,
     stopMessage: 'Der Link funktioniert dann nicht mehr. Wer sich schon eine Kopie gespeichert hat, behält sie.',
     stopped: 'Du teilst den Tanz nicht mehr. Der Link funktioniert nicht mehr.',
-    asText: 'Lieber als Text teilen',
-    asTextHint: 'Geht auch ohne Konto und ohne Internet',
     signInTitle: 'Melde dich an, um einen Link zu teilen',
     signInBody: 'Ein Link gehört zu deinem Konto, damit du ihn später aktualisieren oder beenden kannst. Melde dich mit Apple oder Google an – ohne neues Passwort.',
     signIn: 'Anmelden',
@@ -714,21 +707,6 @@ export const de: Strings = {
     edgeTip: 'Mehr Platz? Zieh über den Boden',
   },
 
-  import: {
-    title: 'Tanz importieren',
-    submit: 'Tanz hinzufügen',
-    intro: 'Füg hier einen Tanz ein, den dir jemand geschickt hat. Text rundherum, etwa aus einem Chat, stört nicht.',
-    field: 'Geteilter Tanz',
-    paste: 'Einfügen',
-    preview: (name: string, style: string, steps: number, follower: boolean) =>
-      `Bereit: ${q(name)} · ${[style, pl(steps, { one: '# Schritt', other: '# Schritte' }), follower ? 'Führen + Folgen' : ''].filter(Boolean).join(' · ')}`,
-    notADance: 'Das ist leider kein Waltzy-Tanz. Lass ihn dir am besten noch einmal schicken.',
-    added: (name: string) => `${q(name)} ist jetzt bei deinen Tänzen`,
-    saveFailed: 'Speichern hat nicht geklappt. Probier es bitte noch einmal.',
-    clipboardEmpty: 'Die Zwischenablage ist leer',
-    clipboardFailed: 'Die Zwischenablage lässt sich nicht lesen. Füg den Text direkt ins Feld ein.',
-  },
-
   validation: {
     where: (w: ValidationWhere) =>
       [w.role ? (w.role === 'leader' ? 'Führen' : 'Folgen') : '', w.start ? 'Startposition' : '', w.step ? `Schritt ${w.step}` : '']
@@ -749,9 +727,6 @@ export const de: Strings = {
     badBeats: '„beats“ (die Schrittlänge) muss größer als 0 sein.',
     notADance: 'Das sieht nicht nach einem Waltzy-Tanz aus.',
     noRoles: 'Das sieht nicht nach einem Waltzy-Tanz aus (es fehlen die Schritte).',
-    empty: 'Füg zuerst einen Tanz ein.',
-    noJson: 'Das ist kein Waltzy-Tanz. Ein geteilter Tanz ist ein Textblock, der mit { beginnt und mit } endet.',
-    badJson: 'Dieser Text lässt sich nicht lesen. Vielleicht wurde er abgeschnitten oder verändert: Kopier den ganzen geteilten Text noch einmal, von { bis }.',
   },
 
   step: {
@@ -999,7 +974,7 @@ export const de: Strings = {
   },
 
   sync: {
-    explain: 'Deine Tänze sind auf diesem Gerät gespeichert und in deinem Konto gesichert – so hast du sie auch auf deinen anderen Geräten.',
+    explain: 'Die Sicherung läuft automatisch. Deine Tänze sind auf diesem Gerät und in deinem Konto gespeichert – so hast du sie auch auf deinen anderen Geräten.',
     syncing: 'Wird gesichert …',
     never: 'Noch nicht gesichert',
     justNow: 'Gerade eben gesichert',
@@ -1007,7 +982,6 @@ export const de: Strings = {
     at: (when: string) => `Letzte Sicherung: ${when}`,
     error: 'Sicherung pausiert',
     retryHint: 'Wir versuchen es von selbst wieder. Deine Tänze sind auf diesem Gerät sicher.',
-    now: 'Jetzt sichern',
   },
 
   legal: {
