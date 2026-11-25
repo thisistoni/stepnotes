@@ -32,11 +32,11 @@ export const APP_SCHEME = 'waltzy';
  */
 export const OPERATOR = {
   /** Person or company responsible for the app, e.g. "Jane Doe" */
-  name: '',
+  name: 'Antonio Beslic',
   /** Postal address (one line, or lines separated by "\n") */
   address: '',
   /** Contact e-mail for privacy requests and reports */
-  email: '',
+  email: 'contact@antoniobeslic.com',
   /** Date the texts were last changed, shown as "Last updated", e.g. "2026-12-01" */
-  updated: '',
+  updated: '2026-11-25',
 };
