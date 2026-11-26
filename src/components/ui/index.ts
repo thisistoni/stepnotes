@@ -41,6 +41,8 @@ export { Segmented, type SegmentedOption, type SegmentedProps } from './Segmente
 // --- inputs ---
 /** Text input: label, icon, clear button, error / hint, multiline, mono. `SearchField` preset. */
 export { SearchField, TextField, type TextFieldProps } from './TextField';
+/** An on / off setting: title, explanation and a switch; the whole row toggles. */
+export { ToggleRow, type ToggleRowProps } from './ToggleRow';
 /** − value + with hold-to-repeat. */
 export { Stepper, type StepperProps } from './Stepper';
 /** Snapping slider (drag / tap, haptic tick per snap, arrow keys on web). Controlled. */

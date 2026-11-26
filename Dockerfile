@@ -1,6 +1,8 @@
-# The Waltzy web app for self-hosting: a static export served by nginx.
-# People open shared dances (/s/<id>) and classes (/c/<code>) here; the phone app's links and
-# QR codes point at this address (see WEB_ORIGIN in src/lib/cloud/config.ts).
+# The Waltzy website for self-hosting: a static export served by nginx.
+# The phone app's links and QR codes (/s/<id>, /c/<code>) point at this address (see WEB_ORIGIN in
+# src/lib/cloud/config.ts). On a phone with Waltzy they open the app; in a browser the site shows
+# "Open in Waltzy" and where to get the app, plus the terms and the privacy policy. It also serves
+# /.well-known/apple-app-site-association, which is what makes the links open the app.
 FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

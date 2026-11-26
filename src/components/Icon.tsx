@@ -180,6 +180,10 @@ const ICONS = {
     { d: 'M4 14h6v6H4z' },
     { d: 'M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5z', fill: true },
   ],
+  /** A class only accepted members can open */
+  lock: [{ d: 'M7.5 11V8a4.5 4.5 0 0 1 9 0v3' }, { d: 'M6.5 11h11a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18.5v-6A1.5 1.5 0 0 1 6.5 11z' }],
+  /** Torch (the phone's light while scanning) */
+  bolt: [{ d: 'M13 3.5L6 13.5h5l-1 7 7-10h-5z' }],
   /** Pull again (refresh) */
   refresh: [{ d: 'M19.5 4.5V9H15' }, { d: 'M19.2 9A7.5 7.5 0 1 0 19.5 13' }],
   /** Teacher / class you teach */

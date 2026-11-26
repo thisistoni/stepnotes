@@ -9,6 +9,7 @@
 import { APP_SCHEME, WEB_ORIGIN } from '../cloud/config';
 
 export const CLASS_CODE_LENGTH = 8;
+export const SHARE_ID_LENGTH = 12;
 
 export const shareUrl = (id: string) => `${WEB_ORIGIN}/s/${encodeURIComponent(id)}`;
 export const classUrl = (code: string) => `${WEB_ORIGIN}/c/${encodeURIComponent(code)}`;
@@ -31,6 +32,17 @@ export function parseClassInput(text: string): string | null {
   if (link) return link[1].toLowerCase().length === CLASS_CODE_LENGTH ? link[1].toLowerCase() : null;
   const code = normalizeCode(text);
   return /^[a-z0-9]+$/.test(code) && code.length === CLASS_CODE_LENGTH ? code : null;
+}
+
+/**
+ * What a scanned QR code holds: a class (link or bare code) or a shared dance (link). Returns the
+ * route inside the app, or null when it is not one of ours.
+ */
+export function parseScanned(text: string): `/c/${string}` | `/s/${string}` | null {
+  const share = /(?:\/|:\/\/)s\/([a-z0-9]+)/i.exec(text);
+  if (share) return share[1].length === SHARE_ID_LENGTH ? `/s/${share[1].toLowerCase()}` : null;
+  const code = parseClassInput(text);
+  return code ? `/c/${code}` : null;
 }
 
 /** The class-post reference used for credit and reports: "<code>/<postId>". */

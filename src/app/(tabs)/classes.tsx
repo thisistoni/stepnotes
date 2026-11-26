@@ -40,8 +40,8 @@ export default function Classes() {
   const onCreate = () => {
     if (requireAccount()) setCreateOpen(true);
   };
-  const create = async (name: string, description: string) => {
-    const cls = await cloud.createClass(name, description);
+  const create = async (name: string, description: string, approval: boolean) => {
+    const cls = await cloud.createClass(name, description, approval);
     await remember(cls).catch(() => {});
     toast.show({ message: (tr) => tr.classes.created, icon: 'check' });
     router.push(`/c/${cls.code}`);

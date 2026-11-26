@@ -15,9 +15,18 @@ export interface LibraryItem { kind: LibraryKind; id: string; data: unknown | nu
 export type LibraryPush = Omit<LibraryItem, 'serverUpdatedAt'>;
 export interface SharedDance { id: string; name: string; dance: unknown; author: Author; updatedAt: string; mine: boolean }
 export interface MyShare { id: string; danceId: string; name: string; updatedAt: string }
-export interface ClassSummary { id: string; code: string; name: string; description: string; owner: Author; mine: boolean; member: boolean; updatedAt: string; postCount: number }
+/** `pending`: asked to join a class with approval, the teacher has not accepted yet */
+export type Membership = 'none' | 'pending' | 'member';
+/**
+ * `member` = `membership === 'member'`. `approval`: new people have to be accepted by the teacher.
+ * `memberCount` / `requestCount` are only filled for the teacher (0 for everyone else).
+ */
+export interface ClassSummary { id: string; code: string; name: string; description: string; owner: Author; mine: boolean; member: boolean; membership: Membership; approval: boolean; memberCount: number; requestCount: number; updatedAt: string; postCount: number }
 export interface ClassPost { id: string; name: string; note: string; dance: unknown; createdAt: string; updatedAt: string }
-export interface ClassDetail extends Omit<ClassSummary, 'postCount'> { posts: ClassPost[] }
+/** `locked`: a class with approval, seen by someone who is not accepted (yet): `posts` is empty */
+export interface ClassDetail extends Omit<ClassSummary, 'postCount'> { locked: boolean; posts: ClassPost[] }
+/** One person in the teacher's list of a class. `joinedAt`: when they joined (or asked). */
+export interface ClassMember { id: string; name: string; status: 'pending' | 'member'; joinedAt: string }
 export type ReportKind = 'share' | 'class' | 'post' | 'user';
 export type ReportReason = 'offensive' | 'spam' | 'copyright' | 'other';
 
@@ -45,11 +54,14 @@ export interface CloudApi {
   // classes
   listClasses(knownCodes: string[]): Promise<ClassSummary[]>;
   getClass(code: string): Promise<ClassDetail | null>;
-  createClass(name: string, description: string): Promise<ClassSummary>;
-  updateClass(id: string, patch: { name?: string; description?: string }): Promise<void>;
+  createClass(name: string, description: string, approval: boolean): Promise<ClassSummary>;
+  updateClass(id: string, patch: { name?: string; description?: string; approval?: boolean }): Promise<void>;
   deleteClass(id: string): Promise<void>;
-  joinClass(code: string): Promise<boolean>;                      // false = unknown code
-  leaveClass(id: string): Promise<void>;
+  joinClass(code: string): Promise<'member' | 'pending' | null>;  // needs an account; pending = the teacher has to accept; null = unknown code
+  leaveClass(id: string): Promise<void>;                          // also takes back a request
+  listClassMembers(classId: string): Promise<ClassMember[]>;      // teacher only: requests first, then members (newest first)
+  approveClassMember(classId: string, userId: string): Promise<void>;
+  removeClassMember(classId: string, userId: string): Promise<void>;   // also declines a request
   addClassPost(classId: string, post: { name: string; note: string; dance: unknown }): Promise<ClassPost>;
   updateClassPost(postId: string, patch: { name?: string; note?: string; dance?: unknown }): Promise<void>;
   removeClassPost(postId: string): Promise<void>;

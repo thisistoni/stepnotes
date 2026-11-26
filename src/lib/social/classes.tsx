@@ -2,10 +2,14 @@
  * "My classes": classes I teach and classes I joined, cached on the device so the Classes tab
  * works offline.
  *
- * - `waltzy.classes.v1`: `{ joined, pending, summaries, userId, syncedAt }`. `joined` are the codes
- *   joined on this device (as a guest or signed in), `pending` the ones joined as a guest and not
- *   yet joined in an account (they are joined right after the next sign-in), `summaries` the last
- *   list from `cloud.listClasses(joined)` (for `userId`, who was signed in then).
+ * Joining needs an account: the teacher sees who is in the class, and a class with approval only
+ * opens once the teacher accepted the request (`membership: 'pending'` until then).
+ *
+ * - `waltzy.classes.v1`: `{ joined, pending, summaries, userId, syncedAt }`. `summaries` is the
+ *   last list from `cloud.listClasses(joined)` (for `userId`, who was signed in then). `joined` and
+ *   `pending` come from earlier versions, where a class could be joined without an account:
+ *   `joined` are the codes kept on this device, `pending` the ones still to join in an account
+ *   (done right after the next sign-in). New joins live in the account only.
  * - `waltzy.classdetails.v1`: the last loaded page of up to 20 classes, for the class page offline.
  *
  *   const { classes, refresh, join, leave, isJoined, remember, forget, cachedDetail, cacheDetail } = useClasses();
@@ -45,10 +49,15 @@ interface Classes {
   error: CloudError | null;
   syncedAt: number | null;
   refresh: () => Promise<void>;
+  /** a class kept on this device by an earlier version (joined without an account) */
   isJoined: (code: string) => boolean;
-  /** Join on this device; signed in also in the account. Rejects with `notFound` for an unknown code. */
-  join: (code: string, known?: ClassSummary | ClassDetail) => Promise<void>;
-  leave: (cls: Pick<ClassSummary, 'id' | 'code' | 'member'>) => Promise<void>;
+  /**
+   * Join in the account, or ask to (`'pending'`: the teacher has to accept). Rejects with
+   * `notSignedIn` without an account and `notFound` for an unknown code.
+   */
+  join: (code: string, known?: ClassSummary | ClassDetail) => Promise<'member' | 'pending'>;
+  /** Leave the class, or take back the request. */
+  leave: (cls: Pick<ClassSummary, 'id' | 'code' | 'membership'>) => Promise<void>;
   /** Put a class into the cached list (after creating or editing it). */
   remember: (summary: ClassSummary) => Promise<void>;
   /** Drop a class from the device (after deleting it). */
@@ -62,6 +71,19 @@ const Ctx = createContext<Classes | null>(null);
 const EMPTY: Stored = { joined: [], pending: [], summaries: [], userId: null, syncedAt: null };
 const NO_DETAILS: Details = {};
 
+/** Entries cached by an earlier version lack the membership fields. */
+function fill<T extends ClassSummary | ClassDetail>(c: T): T {
+  const old = c as Partial<ClassSummary> & Partial<ClassDetail>;
+  return {
+    ...c,
+    membership: old.membership ?? (c.member ? 'member' : 'none'),
+    approval: old.approval ?? false,
+    memberCount: old.memberCount ?? 0,
+    requestCount: old.requestCount ?? 0,
+    ...('posts' in c ? { locked: old.locked ?? false } : null),
+  };
+}
+
 const strings = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && !!x))] : []);
 
 function sanitize(raw: unknown, dropped: () => void): Stored {
@@ -73,17 +95,24 @@ function sanitize(raw: unknown, dropped: () => void): Stored {
   return {
     joined: strings(v.joined),
     pending: strings(v.pending),
-    summaries: Array.isArray(v.summaries) ? v.summaries.filter((s): s is ClassSummary => !!s && typeof s.code === 'string' && typeof s.id === 'string') : [],
+    summaries: Array.isArray(v.summaries) ? v.summaries.filter((s): s is ClassSummary => !!s && typeof s.code === 'string' && typeof s.id === 'string').map(fill) : [],
     userId: typeof v.userId === 'string' ? v.userId : null,
     syncedAt: typeof v.syncedAt === 'number' ? v.syncedAt : null,
   };
 }
-const sanitizeDetails = (raw: unknown): Details => (raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Details) : {});
+function sanitizeDetails(raw: unknown): Details {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Details = {};
+  for (const [code, entry] of Object.entries(raw as Details)) {
+    if (entry?.detail && Array.isArray(entry.detail.posts)) out[code] = { detail: fill(entry.detail), at: entry.at };
+  }
+  return out;
+}
 
 export const summaryOf = (d: ClassDetail | ClassSummary): ClassSummary =>
   'posts' in d ? { ...stripPosts(d), postCount: d.posts.length } : d;
-function stripPosts(d: ClassDetail): Omit<ClassDetail, 'posts'> {
-  const { posts: _p, ...rest } = d;
+function stripPosts(d: ClassDetail): Omit<ClassDetail, 'posts' | 'locked'> {
+  const { posts: _p, locked: _l, ...rest } = d;
   return rest;
 }
 
@@ -149,6 +178,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
         const done: string[] = [];
         for (const code of valueRef.current.pending) {
           try {
+            // a class with approval: this asks the teacher (it then shows as "waiting")
             await cloud.joinClass(code);
             done.push(code);
           } catch (e) {
@@ -174,26 +204,14 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const join = useCallback(
     async (raw: string, known?: ClassSummary | ClassDetail) => {
       const code = normalizeCode(raw);
-      if (userRef.current) {
-        if (!(await cloud.joinClass(code))) throw new CloudError('notFound');
-      }
-      const signedIn = !!userRef.current;
-      await update((cur) => {
-        const summaries = known
-          ? [{ ...summaryOf(known), member: signedIn || known.member }, ...cur.summaries.filter((s) => s.code !== code)].sort(byActivity)
-          : cur.summaries;
-        return [
-          {
-            ...cur,
-            joined: cur.joined.includes(code) ? cur.joined : [code, ...cur.joined],
-            pending: signedIn || cur.pending.includes(code) ? cur.pending : [code, ...cur.pending],
-            summaries,
-          },
-          undefined,
-        ];
-      });
+      if (!userRef.current) throw new CloudError('notSignedIn');
+      const status = await cloud.joinClass(code);
+      if (!status) throw new CloudError('notFound');
+      // show it under "My classes" right away (the next refresh brings the real entry)
+      if (known) await remember({ ...summaryOf(known), member: status === 'member', membership: status }).catch(() => {});
+      return status;
     },
-    [update],
+    [remember],
   );
 
   const forget = useCallback(
@@ -217,8 +235,8 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   );
 
   const leave = useCallback(
-    async (cls: Pick<ClassSummary, 'id' | 'code' | 'member'>) => {
-      if (userRef.current && cls.member) await cloud.leaveClass(cls.id);
+    async (cls: Pick<ClassSummary, 'id' | 'code' | 'membership'>) => {
+      if (userRef.current && cls.membership !== 'none') await cloud.leaveClass(cls.id);
       await forget(cls.code);
     },
     [forget],
@@ -242,7 +260,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
     const sameUser = value.userId === userId;
     const list = value.summaries
       .filter((c) => sameUser || value.joined.includes(c.code))
-      .map((c) => (sameUser ? c : { ...c, mine: false, member: false }))
+      .map((c): ClassSummary => (sameUser ? c : { ...c, mine: false, member: false, membership: 'none', memberCount: 0, requestCount: 0 }))
       .filter((c) => !isBlocked(c.owner.id));
     return {
       ready,
@@ -251,7 +269,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
       error,
       syncedAt: value.syncedAt,
       refresh,
-      isJoined: (code) => value.joined.includes(code) || value.summaries.some((s) => s.code === code && s.member && sameUser),
+      isJoined: (code) => value.joined.includes(code),
       join,
       leave,
       remember,

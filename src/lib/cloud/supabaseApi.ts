@@ -12,7 +12,7 @@ import { createClient, isAuthError, type RealtimeChannel, type SupabaseClient, t
 import * as WebBrowser from 'expo-web-browser';
 import { AppState, Platform } from 'react-native';
 
-import { CloudError, type ClassDetail, type ClassPost, type ClassSummary, type CloudApi, type CloudUser, type LibraryItem, type MyShare, type SharedDance } from './api';
+import { CloudError, type ClassDetail, type ClassMember, type ClassPost, type ClassSummary, type CloudApi, type CloudUser, type LibraryItem, type MyShare, type SharedDance } from './api';
 import { APP_SCHEME, SUPABASE_KEY, SUPABASE_URL } from './config';
 
 let client: SupabaseClient | null = null;
@@ -47,7 +47,7 @@ function dbError(error: PgError, status: number): CloudError {
   if (status === 429) return new CloudError('rateLimited', error.message);
   if (code === '28000' || status === 401 || code === 'PGRST301' || code === 'PGRST303') return new CloudError('notSignedIn', error.message);
   if (code === '53400') return new CloudError('limit', error.message);
-  if (code === 'PGRST116') return new CloudError('notFound', error.message);
+  if (code === 'PGRST116' || code === 'P0002') return new CloudError('notFound', error.message);
   return new CloudError('unknown', `${code} ${error.message ?? ''}`.trim());
 }
 
@@ -127,9 +127,14 @@ const toSummary = (r: Row): ClassSummary => ({
   owner: author(r.owner),
   mine: r.mine === true,
   member: r.member === true,
+  membership: r.membership === 'pending' ? 'pending' : r.member === true ? 'member' : 'none',
+  approval: r.approval === true,
+  memberCount: n(r.member_count),
+  requestCount: n(r.request_count),
   updatedAt: s(r.updated_at),
   postCount: n(r.post_count),
 });
+const toMember = (r: Row): ClassMember => ({ id: s(r.id), name: s(r.name), status: r.status === 'pending' ? 'pending' : 'member', joinedAt: s(r.joined_at) });
 const toPost = (r: Row): ClassPost => ({
   id: s(r.id),
   name: s(r.name),
@@ -369,13 +374,13 @@ export const supabaseApi: CloudApi = {
     const r = (await run(sb().rpc('get_class', { p_code: code }))) as Row | null;
     if (!r) return null;
     const { postCount: _p, ...summary } = toSummary(r);
-    const detail: ClassDetail = { ...summary, posts: Array.isArray(r.posts) ? (r.posts as Row[]).map(toPost) : [] };
+    const detail: ClassDetail = { ...summary, locked: r.locked === true, posts: Array.isArray(r.posts) ? (r.posts as Row[]).map(toPost) : [] };
     return detail;
   },
 
-  async createClass(name, description) {
+  async createClass(name, description, approval) {
     await requireUser();
-    const row = (await run(sb().from('classes').insert({ name, description }).select('id, code').single())) as Row;
+    const row = (await run(sb().from('classes').insert({ name, description, approval }).select('id, code').single())) as Row;
     // read it back through class_summaries for the owner name and flags
     const list = (await run(sb().rpc('class_summaries', { p_codes: [s(row.code)] }))) as Row[] | null;
     const found = (list ?? []).map(toSummary).find((c) => c.id === s(row.id));
@@ -396,13 +401,29 @@ export const supabaseApi: CloudApi = {
 
   async joinClass(code) {
     await requireUser();
-    const id = await run(sb().rpc('join_class', { p_code: code }));
-    return id != null;
+    const status = await run(sb().rpc('join_class_v2', { p_code: code }));
+    return status === 'pending' ? 'pending' : status == null ? null : 'member';
   },
 
   async leaveClass(id) {
     const user = await requireUser();
     await run(sb().from('class_members').delete().eq('class_id', id).eq('user_id', user.id));
+  },
+
+  async listClassMembers(classId) {
+    await requireUser();
+    const rows = (await run(sb().rpc('class_member_list', { p_class: classId }))) as Row[] | null;
+    return (rows ?? []).map(toMember);
+  },
+
+  async approveClassMember(classId, userId) {
+    await requireUser();
+    await run(sb().rpc('class_member_set', { p_class: classId, p_user: userId, p_action: 'approve' }));
+  },
+
+  async removeClassMember(classId, userId) {
+    await requireUser();
+    await run(sb().rpc('class_member_set', { p_class: classId, p_user: userId, p_action: 'remove' }));
   },
 
   async addClassPost(classId, post) {

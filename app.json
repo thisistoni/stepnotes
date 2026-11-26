@@ -21,7 +21,10 @@
         ],
         "CFBundleDevelopmentRegion": "en"
       },
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "associatedDomains": [
+        "applinks:waltzy.antoniobeslic.com"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -32,7 +35,29 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.antoniobeslic.waltzy",
-      "userInterfaceStyle": "light"
+      "userInterfaceStyle": "light",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "waltzy.antoniobeslic.com",
+              "pathPrefix": "/c/"
+            },
+            {
+              "scheme": "https",
+              "host": "waltzy.antoniobeslic.com",
+              "pathPrefix": "/s/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -51,7 +76,15 @@
         }
       ],
       "expo-apple-authentication",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Waltzy uses the camera to scan the QR code of a class or a shared dance.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "scheme": "waltzy",
     "owner": "thisistoni",
@@ -64,6 +97,9 @@
       "eas": {
         "projectId": "ace320bd-b7cc-46b0-83d9-c11528353447"
       }
+    },
+    "locales": {
+      "de": "./locales/de.json"
     }
   }
 }

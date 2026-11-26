@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cloudErrorReason, type ClassDetail } from '../cloud/api';
 import { cloud } from '../cloud';
+import { useAuth } from '../cloud/auth';
 import { summaryOf, useClasses } from './classes';
 
 export type ClassLoad =
@@ -14,7 +15,8 @@ export type ClassLoad =
 /**
  * A class page's data: `cloud.getClass(code)`, cached on the device for offline use; when the
  * cloud cannot be reached the cached copy is shown (with `offlineAt`). `reload()` fetches again
- * without going back to the skeleton.
+ * without going back to the skeleton; so does signing in or out (what a class shows depends on
+ * who asks).
  */
 export function useClassDetail(code: string) {
   const { cachedDetail, cacheDetail, remember, isJoined } = useClasses();
@@ -37,7 +39,8 @@ export function useClassDetail(code: string) {
         const d = deps.current;
         d.cacheDetail(detail);
         // keep "My classes" up to date with what we just saw
-        if (detail.mine || detail.member || d.isJoined(detail.code)) void d.remember(summaryOf(detail)).catch(() => {});
+        // (a locked class has no dances to count: the list keeps the entry it got from the cloud)
+        if (!detail.locked && (detail.mine || detail.member || d.isJoined(detail.code))) void d.remember(summaryOf(detail)).catch(() => {});
       } catch (error) {
         if (n !== seq.current) return;
         if (cloudErrorReason(error) === 'notFound') return setState({ status: 'notFound' });
@@ -57,6 +60,15 @@ export function useClassDetail(code: string) {
   useEffect(() => {
     void load(false);
   }, [load]);
+
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const loadedFor = useRef(userId);
+  useEffect(() => {
+    if (loadedFor.current === userId) return;
+    loadedFor.current = userId;
+    void load(true);
+  }, [userId, load]);
 
   const reload = useCallback(() => load(true), [load]);
   const retry = useCallback(() => load(false), [load]);

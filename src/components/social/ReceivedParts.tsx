@@ -76,7 +76,7 @@ export function InfoStrip({
   muted,
   testID,
 }: {
-  icon: 'link' | 'cap' | 'cloud-off' | 'info';
+  icon: 'link' | 'cap' | 'cloud-off' | 'info' | 'lock' | 'people';
   title: string;
   body?: string;
   action?: ReactNode;

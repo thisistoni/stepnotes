@@ -89,7 +89,7 @@ src/
 
 Optional accounts and the library backup run on Supabase (EU, Frankfurt). The app is local-first: AsyncStorage is the source of truth for the UI, the cloud is a backup that merges between devices.
 
-The database (tables, row level security, functions) is in `supabase/migrations/`, exactly as applied to the live project. Change the schema with a new migration file there, never by hand in the dashboard. People who only receive (open a link, join a class) need no account and read through functions keyed by an unguessable id or code; people who publish need an account and manage their own rows.
+The database (tables, row level security, functions) is in `supabase/migrations/`, exactly as applied to the live project. Change the schema with a new migration file there, never by hand in the dashboard. People who only look (open a shared dance, or a class without approval) need no account and read through functions keyed by an unguessable id or code; people who publish or join a class need an account. Joining needs one so the teacher sees who is in the class (`class_member_list`); a class with `approval` shows its dances only to members the teacher accepted (`join_class_v2` returns `pending`, `class_member_set` accepts or removes).
 
 ```
 src/lib/cloud/
@@ -116,10 +116,13 @@ src/lib/cloud/
   EXPO_PUBLIC_CLOUD=fake npx expo export --platform web --output-dir dist-fake
   ```
 
+  A fake build is also the only web build that runs the app itself: the public website shows no app (see "Website").
+
   Sign in with any e-mail and the code `123456` (`000000` is a wrong code). One browser profile can play several devices: wipe the `waltzy.*` keys except `waltzy.fakecloud.v1`. `window.__fakeCloud.setOffline(true)` makes every call fail with `offline`.
-- **Device keys of sharing and classes**: `waltzy.shares.v1` (my links, for the signed-in user), `waltzy.classes.v1` (joined codes, codes still to join in the account, the last list of my classes), `waltzy.classdetails.v1` (the last loaded page of up to 20 classes, for offline), `waltzy.blocked.v1` (blocked people `{ id, name, at }`).
+- **Device keys of sharing and classes**: `waltzy.shares.v1` (my links, for the signed-in user), `waltzy.classes.v1` (the last list of my classes; plus codes joined without an account by earlier versions), `waltzy.classdetails.v1` (the last loaded page of up to 20 classes, for offline), `waltzy.blocked.v1` (blocked people `{ id, name, at }`).
 - **Links** (used by sharing and classes): `https://<web origin>/s/<shareId>` (a shared dance), `https://<web origin>/c/<classCode>` (a class); inside the app `waltzy://s/<shareId>`, `waltzy://c/<classCode>`. `WEB_ORIGIN` is the page's origin on web, else `EXPO_PUBLIC_WEB_ORIGIN` or `https://waltzy.antoniobeslic.com`.
-- **Web hosting**: the web app runs at `https://waltzy.antoniobeslic.com`, built from the `Dockerfile` (static export served by nginx, `deploy/nginx.conf`) by Dokploy on the owner's server. The phone app's links and QR codes point there, so that address has to stay up.
+- **Website** (`https://waltzy.antoniobeslic.com`): there is no web version of the app. The address only receives the links and QR codes people share. On an iPhone with Waltzy they open the app directly (universal links: `ios.associatedDomains` in `app.json` plus `public/.well-known/apple-app-site-association`, which lists the Apple team id and the paths `/c/*` and `/s/*`). In a browser, `src/app/_layout.web.tsx` shows `src/components/site/WebSite.tsx`: "Open in Waltzy" (the `waltzy://` link), where to get the app (`INSTALL_URL` in `src/lib/cloud/config.ts`, the public TestFlight link during the beta), and the terms and privacy pages. Built from the `Dockerfile` (static export served by nginx, `deploy/nginx.conf`) by Dokploy on the owner's server; that address has to stay up. Android: the intent filter is in `app.json`, but links only open the app once `public/.well-known/assetlinks.json` exists with the signing key's fingerprint (`eas credentials -p android`); until then they show the website.
+- **Scanner** (`src/app/scan.tsx`): `expo-camera` reads QR codes inside the app (a class or a shared dance, `parseScanned` in `src/lib/social/links.ts`). The camera does not work in the iOS simulator.
 
 ## Languages
 

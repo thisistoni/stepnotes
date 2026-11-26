@@ -1,7 +1,8 @@
 /**
  * A stand-in for the backend, for QA builds (`EXPO_PUBLIC_CLOUD=fake`). It keeps the same rules
  * as the database: rows belong to their owner, others cannot change them, library rows follow
- * last-writer-wins on `updatedAt`, ids and codes are generated, `mine` / `member` are computed.
+ * last-writer-wins on `updatedAt`, ids and codes are generated, `mine` / `member` are computed,
+ * a class with approval hides its dances from people the teacher has not accepted.
  *
  * - The "server" lives in AsyncStorage under `waltzy.fakecloud.v1` and is re-read on every call,
  *   so one browser profile can play several devices: wipe the other `waltzy.*` keys (the device)
@@ -13,7 +14,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { CloudError, type ClassDetail, type ClassSummary, type CloudApi, type CloudUser, type LibraryItem, type LibraryKind, type MyShare } from './api';
+import { CloudError, type ClassDetail, type ClassMember, type ClassSummary, type CloudApi, type CloudUser, type LibraryItem, type LibraryKind, type MyShare } from './api';
 
 export const FAKE_CLOUD_KEY = 'waltzy.fakecloud.v1';
 export const FAKE_SESSION_KEY = 'waltzy.fakesession.v1';
@@ -22,9 +23,9 @@ export const FAKE_CODE = '123456';
 interface FUser { id: string; email: string; displayName: string | null }
 interface FLib { owner: string; kind: LibraryKind; id: string; data: unknown | null; updatedAt: number; deleted: boolean; serverUpdatedAt: string }
 interface FShare { id: string; owner: string; danceId: string; name: string; dance: unknown; updatedAt: string }
-interface FClass { id: string; code: string; owner: string; name: string; description: string; updatedAt: string }
+interface FClass { id: string; code: string; owner: string; name: string; description: string; approval?: boolean; updatedAt: string }
 interface FPost { id: string; classId: string; name: string; note: string; dance: unknown; createdAt: string; updatedAt: string }
-interface FMember { classId: string; userId: string }
+interface FMember { classId: string; userId: string; status?: 'member' | 'pending'; joinedAt?: string }
 interface FReport { by: string | null; kind: string; ref: string; reason: string; details: string; at: string }
 
 interface State {
@@ -83,15 +84,31 @@ const rand = (len: number) => {
 const copy = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
 const nameOf = (st: State, id: string) => st.users.find((u) => u.id === id)?.displayName ?? '';
 
+const statusOf = (m: FMember) => m.status ?? 'member';
+/** the class `id` if `uid` teaches it, else a `notFound` error (like the database functions) */
+function ownClass(st: State, id: string, uid: string | null): FClass {
+  const me = needUser(uid);
+  const c = st.classes.find((x) => x.id === id && x.owner === me);
+  if (!c) throw new CloudError('notFound');
+  return c;
+}
+
 function summary(st: State, c: FClass, uid: string | null): ClassSummary {
+  const mine = c.owner === uid;
+  const own = uid ? st.members.find((m) => m.classId === c.id && m.userId === uid) : undefined;
+  const others = st.members.filter((m) => m.classId === c.id && m.userId !== c.owner);
   return {
     id: c.id,
     code: c.code,
     name: c.name,
     description: c.description,
     owner: { id: c.owner, name: nameOf(st, c.owner) },
-    mine: c.owner === uid,
-    member: !!uid && st.members.some((m) => m.classId === c.id && m.userId === uid),
+    mine,
+    member: !!own && statusOf(own) === 'member',
+    membership: own ? statusOf(own) : 'none',
+    approval: !!c.approval,
+    memberCount: mine ? others.filter((m) => statusOf(m) === 'member').length : 0,
+    requestCount: mine ? others.filter((m) => statusOf(m) === 'pending').length : 0,
     updatedAt: c.updatedAt,
     postCount: st.posts.filter((p) => p.classId === c.id).length,
   };
@@ -280,17 +297,20 @@ export const fakeApi: CloudApi = {
       const c = st.classes.find((x) => x.code === code.trim().toLowerCase());
       if (!c) return null;
       const { postCount: _n, ...rest } = summary(st, c, uid);
-      const posts = st.posts
-        .filter((p) => p.classId === c.id)
-        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-        .map(({ classId: _c, ...p }) => copy(p));
-      return { ...rest, posts };
+      const locked = rest.approval && !rest.mine && !rest.member;
+      const posts = locked
+        ? []
+        : st.posts
+            .filter((p) => p.classId === c.id)
+            .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+            .map(({ classId: _c, ...p }) => copy(p));
+      return { ...rest, locked, posts };
     }),
 
-  createClass: (name, description) =>
+  createClass: (name, description, approval) =>
     call((st, uid) => {
       const me = needUser(uid);
-      const c: FClass = { id: `c-${rand(10)}`, code: rand(8), owner: me, name, description, updatedAt: now(st) };
+      const c: FClass = { id: `c-${rand(10)}`, code: rand(8), owner: me, name, description, approval, updatedAt: now(st) };
       st.classes.push(c);
       return summary(st, c, me);
     }, true),
@@ -302,6 +322,13 @@ export const fakeApi: CloudApi = {
       if (!c) throw new CloudError('notFound');
       if (patch.name !== undefined) c.name = patch.name;
       if (patch.description !== undefined) c.description = patch.description;
+      if (patch.approval !== undefined) {
+        // approval switched off: everyone who was waiting is in
+        if (c.approval && !patch.approval) {
+          for (const m of st.members) if (m.classId === c.id && statusOf(m) === 'pending') Object.assign(m, { status: 'member', joinedAt: now(st) });
+        }
+        c.approval = patch.approval;
+      }
       c.updatedAt = now(st);
     }, true),
 
@@ -318,15 +345,41 @@ export const fakeApi: CloudApi = {
     call((st, uid) => {
       const me = needUser(uid);
       const c = st.classes.find((x) => x.code === code.trim().toLowerCase());
-      if (!c) return false;
-      if (c.owner !== me && !st.members.some((m) => m.classId === c.id && m.userId === me)) st.members.push({ classId: c.id, userId: me });
-      return true;
+      if (!c) return null;
+      if (c.owner === me) return 'member';
+      const own = st.members.find((m) => m.classId === c.id && m.userId === me);
+      if (own) return statusOf(own);
+      const status = c.approval ? 'pending' : 'member';
+      st.members.push({ classId: c.id, userId: me, status, joinedAt: now(st) });
+      return status;
     }, true),
 
   leaveClass: (id) =>
     call((st, uid) => {
       const me = needUser(uid);
       st.members = st.members.filter((m) => !(m.classId === id && m.userId === me));
+    }, true),
+
+  listClassMembers: (classId) =>
+    call((st, uid): ClassMember[] => {
+      const c = ownClass(st, classId, uid);
+      return st.members
+        .filter((m) => m.classId === c.id && m.userId !== c.owner)
+        .map((m) => ({ id: m.userId, name: nameOf(st, m.userId), status: statusOf(m), joinedAt: m.joinedAt ?? c.updatedAt }))
+        .sort((a, b) => (a.status !== b.status ? (a.status === 'pending' ? -1 : 1) : a.joinedAt < b.joinedAt ? 1 : -1));
+    }),
+
+  approveClassMember: (classId, userId) =>
+    call((st, uid) => {
+      const c = ownClass(st, classId, uid);
+      const m = st.members.find((x) => x.classId === c.id && x.userId === userId && statusOf(x) === 'pending');
+      if (m) Object.assign(m, { status: 'member', joinedAt: now(st) });
+    }, true),
+
+  removeClassMember: (classId, userId) =>
+    call((st, uid) => {
+      const c = ownClass(st, classId, uid);
+      st.members = st.members.filter((m) => !(m.classId === c.id && m.userId === userId));
     }, true),
 
   addClassPost: (classId, post) =>

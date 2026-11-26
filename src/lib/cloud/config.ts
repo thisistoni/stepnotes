@@ -17,7 +17,11 @@ export const CLOUD_MODE: 'fake' | 'supabase' = process.env.EXPO_PUBLIC_CLOUD ===
  */
 export const EMAIL_SIGN_IN = CLOUD_MODE === 'fake' || process.env.EXPO_PUBLIC_EMAIL_SIGN_IN === '1';
 
-/** Origin of the web app, for links people share (`${WEB_ORIGIN}/s/<id>`, `${WEB_ORIGIN}/c/<code>`). */
+/**
+ * Origin of the links people share (`${WEB_ORIGIN}/s/<id>`, `${WEB_ORIGIN}/c/<code>`). On a phone
+ * with Waltzy they open the app (iOS: `associatedDomains` in app.json and the file
+ * `public/.well-known/apple-app-site-association`); in a browser they show the "get the app" page.
+ */
 export const WEB_ORIGIN: string =
   Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin
     ? window.location.origin
@@ -25,6 +29,9 @@ export const WEB_ORIGIN: string =
 
 /** In-app links use the app scheme ("waltzy://s/<id>"). */
 export const APP_SCHEME = 'waltzy';
+
+/** Where people without the app get it (the public TestFlight link while Waltzy is in beta). */
+export const INSTALL_URL = process.env.EXPO_PUBLIC_INSTALL_URL ?? 'https://testflight.apple.com/join/BHFbZNqq';
 
 /**
  * Who runs the app, shown on the terms and privacy pages. Filled in by the owner; while a value
@@ -38,5 +45,5 @@ export const OPERATOR = {
   /** Contact e-mail for privacy requests and reports */
   email: 'contact@antoniobeslic.com',
   /** Date the texts were last changed, shown as "Last updated", e.g. "2026-12-01" */
-  updated: '2026-11-25',
+  updated: '2026-11-26',
 };

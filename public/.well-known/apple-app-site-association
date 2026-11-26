@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["3TRF6L2MC2.com.antoniobeslic.waltzy"],
+        "components": [
+          { "/": "/c/*", "comment": "a class: opens in the app" },
+          { "/": "/s/*", "comment": "a shared dance: opens in the app" }
+        ]
+      }
+    ]
+  }
+}

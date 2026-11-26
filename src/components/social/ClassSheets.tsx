@@ -1,8 +1,8 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { Button, Sheet, Text, TextField } from '@/components/ui';
+import { Button, Sheet, Text, TextField, ToggleRow } from '@/components/ui';
 import { cloudErrorText } from '@/lib/cloud';
 import { useT } from '@/lib/i18n';
 import { parseClassInput } from '@/lib/social/links';
@@ -21,8 +21,8 @@ function useOnOpen(visible: boolean, reset: () => void) {
 }
 
 /**
- * Create a class, or edit its name and description. `onSubmit` throws a CloudError on failure
- * (shown under the form); on success the sheet closes.
+ * Create a class, or edit its name, description and whether new members need approval.
+ * `onSubmit` throws a CloudError on failure (shown under the form); on success the sheet closes.
  */
 export function ClassFormSheet({
   visible,
@@ -33,17 +33,19 @@ export function ClassFormSheet({
   visible: boolean;
   onClose: () => void;
   /** editing: the current values */
-  initial?: { name: string; description: string };
-  onSubmit: (name: string, description: string) => Promise<void>;
+  initial?: { name: string; description: string; approval: boolean };
+  onSubmit: (name: string, description: string, approval: boolean) => Promise<void>;
 }) {
   const t = useT();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [approval, setApproval] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   useOnOpen(visible, () => {
     setName(initial?.name ?? '');
     setDescription(initial?.description ?? '');
+    setApproval(initial?.approval ?? false);
     setError(null);
   });
 
@@ -51,7 +53,7 @@ export function ClassFormSheet({
     if (!name.trim()) return setError(t.classes.nameEmpty);
     setBusy(true);
     try {
-      await onSubmit(name.trim(), description.trim());
+      await onSubmit(name.trim(), description.trim(), approval);
       onClose();
     } catch (e) {
       setError(cloudErrorText(e, t));
@@ -88,18 +90,23 @@ export function ClassFormSheet({
           minHeight={88}
           testID="class-description"
         />
+        <ToggleRow title={t.classes.approvalLabel} subtitle={t.classes.approvalHint} value={approval} onChange={setApproval} testID="class-approval" />
         <Button label={initial ? t.classes.save : t.classes.createSubmit} icon={initial ? 'check' : 'plus'} loading={busy} onPress={submit} testID="class-submit" />
       </ScrollView>
     </Sheet>
   );
 }
 
-/** Join a class: type the code or paste the link, then the class page opens (join there). */
+/** Join a class: scan the QR code, type the code or paste the link, then the class page opens (join there). */
 export function JoinClassSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useT();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState<string | null>(null);
+  const go = (path: string) => {
+    setTarget(path);
+    onClose();
+  };
   useOnOpen(visible, () => {
     setText('');
     setError(null);
@@ -108,15 +115,14 @@ export function JoinClassSheet({ visible, onClose }: { visible: boolean; onClose
   const find = () => {
     const code = parseClassInput(text);
     if (!code) return setError(t.classes.joinBad);
-    setTarget(code);
-    onClose();
+    go(`/c/${code}`);
   };
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
       onClosed={() => {
-        if (target) router.push(`/c/${target}`);
+        if (target) router.push(target as Href);
         setTarget(null);
       }}
       title={t.classes.joinTitle}
@@ -126,6 +132,7 @@ export function JoinClassSheet({ visible, onClose }: { visible: boolean; onClose
         <Text variant="small" color="ink2">
           {t.classes.joinBody}
         </Text>
+        <Button label={t.classes.joinScan} icon="qr" onPress={() => go('/scan')} testID="join-scan" />
         <TextField
           label={t.classes.joinLabel}
           value={text}
@@ -142,7 +149,7 @@ export function JoinClassSheet({ visible, onClose }: { visible: boolean; onClose
           clearable
           testID="join-code"
         />
-        <Button label={t.classes.joinFind} icon="search" onPress={find} testID="join-find" />
+        <Button label={t.classes.joinFind} icon="search" variant="secondary" onPress={find} testID="join-find" />
       </View>
     </Sheet>
   );

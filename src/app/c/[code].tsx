@@ -1,12 +1,13 @@
 /**
  * A class (`/c/<code>`), for anyone with the link: name, teacher, description and the dances
- * (newest first) with their notes. Visitors join (a guest on this device; signed in also in the
- * account) or leave; "…": report the class, block the teacher. The teacher edits the class, adds
- * dances, edits / updates / removes posts, invites students and deletes the class.
+ * (newest first) with their notes. Visitors join with their account or leave; a class with
+ * approval shows its dances only once the teacher accepted the request ("locked" until then).
+ * "…": report the class, block the teacher. The teacher edits the class, adds dances, edits /
+ * updates / removes posts, invites students, sees who joined and deletes the class.
  * States: loading, unknown code, offline (cached copy if there is one), blocked teacher.
  */
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BlockedNotice, useBlockPerson } from '@/components/social/BlockedNotice';
@@ -16,10 +17,10 @@ import { FirstVisitLesson, InfoStrip, MoreButton, ProblemPage } from '@/componen
 import { ReportSheet } from '@/components/social/ReportSheet';
 import { Button, Card, EmptyState, Entrance, Header, Icon, IconButton, Menu, Screen, Skeleton, Text, useConfirm, useToast, type MenuItem } from '@/components/ui';
 import { cloud, cloudErrorText, type ClassDetail, type ClassPost } from '@/lib/cloud';
-import { useAuth } from '@/lib/cloud/auth';
+import { useAuth, useRequireAccount } from '@/lib/cloud/auth';
 import { useT } from '@/lib/i18n';
 import { useBlocked } from '@/lib/social/blocked';
-import { useClasses } from '@/lib/social/classes';
+import { summaryOf, useClasses } from '@/lib/social/classes';
 import { normalizeCode } from '@/lib/social/links';
 import { readReceived } from '@/lib/social/saved';
 import { sharePayload } from '@/lib/social/shares';
@@ -75,7 +76,8 @@ function ClassPage({ detail, offlineAt, reload }: { detail: ClassDetail; offline
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
-  const { signedIn } = useAuth();
+  const { signedIn, profile } = useAuth();
+  const requireAccount = useRequireAccount();
   const { isJoined, join, leave, forget, remember } = useClasses();
   const { get } = useDances();
   const blockPerson = useBlockPerson();
@@ -87,18 +89,50 @@ function ClassPage({ detail, offlineAt, reload }: { detail: ClassDetail; offline
   const [noteFor, setNoteFor] = useState<ClassPost | null>(null);
   const [busy, setBusy] = useState(false);
   const teacher = detail.owner.name.trim() || t.received.someone;
-  const joined = detail.member || isJoined(detail.code);
   const mine = detail.mine;
+  const locked = detail.locked;
+  const pending = detail.membership === 'pending';
+  // without an account: a class kept on this device by an earlier version still counts as joined
+  const joined = detail.member || (!signedIn && !locked && isJoined(detail.code));
   const posts = useMemo(() => detail.posts.map((p) => ({ post: p, dance: readReceived(p.dance, t.common.untitled) })), [detail.posts, t.common.untitled]);
 
   const fail = (e: unknown) => toast.show({ message: (tr) => cloudErrorText(e, tr), icon: 'alert' });
 
-  const onJoin = async () => {
+  const doJoin = async () => {
     setBusy(true);
     try {
-      await join(detail.code, detail);
-      toast.show({ message: (tr) => tr.classes.joined, icon: 'check' });
-      if (signedIn) void reload();
+      const status = await join(detail.code, detail);
+      toast.show({ message: (tr) => (status === 'pending' ? tr.classes.requested : tr.classes.joined), icon: 'check', duration: status === 'pending' ? 5000 : undefined });
+      await reload();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  // Joining needs an account. Someone who tapped "Join" and came back signed in is joined
+  // without having to tap again.
+  const wantsJoin = useRef(false);
+  const hasAccount = signedIn && !!profile?.displayName;
+  const joinRef = useRef(doJoin);
+  useEffect(() => {
+    joinRef.current = doJoin;
+  });
+  useEffect(() => {
+    if (!hasAccount || !wantsJoin.current) return;
+    wantsJoin.current = false;
+    void joinRef.current();
+  }, [hasAccount]);
+  const onJoin = () => {
+    if (requireAccount()) return void doJoin();
+    wantsJoin.current = true;
+  };
+  const onWithdraw = async () => {
+    setBusy(true);
+    try {
+      await leave(detail);
+      toast.show({ message: (tr) => tr.classes.withdrawn, icon: 'check' });
+      await reload();
     } catch (e) {
       fail(e);
     } finally {
@@ -139,10 +173,10 @@ function ClassPage({ detail, offlineAt, reload }: { detail: ClassDetail; offline
       fail(e);
     }
   };
-  const onEdit = async (name: string, description: string) => {
-    await cloud.updateClass(detail.id, { name, description });
+  const onEdit = async (name: string, description: string, approval: boolean) => {
+    await cloud.updateClass(detail.id, { name, description, approval });
     toast.show({ message: (tr) => tr.classes.edited, icon: 'check' });
-    await remember({ ...detail, name, description, postCount: detail.posts.length, updatedAt: new Date().toISOString() }).catch(() => {});
+    await remember({ ...summaryOf(detail), name, description, approval, updatedAt: new Date().toISOString() }).catch(() => {});
     await reload();
   };
   const onPost = async (dance: Dance, note: string) => {
@@ -188,12 +222,14 @@ function ClassPage({ detail, offlineAt, reload }: { detail: ClassDetail; offline
   const items: MenuItem[] = mine
     ? [
         { key: 'invite', label: t.classes.invite, icon: 'qr', onPress: () => router.push(`/c/${detail.code}/invite`) },
+        { key: 'members', label: t.classes.members, icon: 'people', onPress: () => router.push(`/c/${detail.code}/members`) },
         { key: 'edit', label: t.classes.editClass, icon: 'pencil', onPress: () => setEditOpen(true) },
         { key: 'delete', label: t.classes.deleteClass, icon: 'trash', destructive: true, onPress: onDeleteClass },
       ]
     : [
         { key: 'report', label: t.classes.reportClass, icon: 'flag', onPress: () => setReportOpen(true) },
         ...(joined ? [{ key: 'leave', label: t.classes.leave, icon: 'logout' as const, onPress: onLeave }] : []),
+        ...(pending ? [{ key: 'withdraw', label: t.classes.withdraw, icon: 'logout' as const, onPress: () => void onWithdraw() }] : []),
         { key: 'block', label: t.classes.blockTeacher(teacher), icon: 'block', destructive: true, onPress: () => void blockPerson(detail.owner) },
       ];
   const menuPost = postMenu ? posts.find((p) => p.post.id === postMenu.id) : undefined;
@@ -211,7 +247,7 @@ function ClassPage({ detail, offlineAt, reload }: { detail: ClassDetail; offline
       <Entrance index={0}>
         <View style={s.hero}>
           <View style={[s.heroTile, { backgroundColor: tone.tint }]}>
-            <Icon name={mine ? 'cap' : 'people'} size={30} color={tone.deep} />
+            <Icon name={mine ? 'cap' : locked ? 'lock' : 'people'} size={30} color={tone.deep} />
           </View>
           <Text variant="title" accessibilityRole="header" testID="class-name">
             {detail.name}
@@ -238,6 +274,20 @@ function ClassPage({ detail, offlineAt, reload }: { detail: ClassDetail; offline
           <View style={s.teacherActions}>
             <Button label={t.classes.invite} icon="qr" onPress={() => router.push(`/c/${detail.code}/invite`)} testID="class-invite" />
             <Button label={t.classes.addDance} icon="plus" variant="secondary" onPress={() => setAddOpen(true)} testID="class-add" />
+            <MembersRow memberCount={detail.memberCount} requestCount={detail.requestCount} onPress={() => router.push(`/c/${detail.code}/members`)} />
+          </View>
+        ) : pending ? (
+          <InfoStrip
+            icon="lock"
+            title={t.classes.pendingTitle}
+            body={t.classes.pendingBody(teacher)}
+            action={<Button label={t.classes.withdraw} variant="secondary" size="sm" inline loading={busy} onPress={onWithdraw} testID="class-withdraw" />}
+            testID="class-pending"
+          />
+        ) : locked ? (
+          <View style={s.teacherActions}>
+            <InfoStrip muted icon="lock" title={t.classes.lockedTitle} body={t.classes.lockedBody(teacher)} testID="class-locked" />
+            <Button label={t.classes.askToJoin} icon="plus" loading={busy} onPress={onJoin} testID="class-ask" />
           </View>
         ) : joined ? (
           <InfoStrip
@@ -251,13 +301,14 @@ function ClassPage({ detail, offlineAt, reload }: { detail: ClassDetail; offline
         )}
       </Entrance>
 
-      {!mine && (
+      {!mine && !locked && (
         <View style={s.block}>
           <FirstVisitLesson />
         </View>
       )}
 
-      <Entrance index={2}>
+      {/* a locked class has nothing to list: its dances stay with the members */}
+      <Entrance index={2} style={locked && s.hidden}>
         <Text variant="overline" color="ink2" style={s.overline} accessibilityRole="header">
           {`${t.classes.dancesTitle} · ${detail.posts.length}`}
         </Text>
@@ -277,12 +328,40 @@ function ClassPage({ detail, offlineAt, reload }: { detail: ClassDetail; offline
       <ReportSheet visible={reportOpen} onClose={() => setReportOpen(false)} kind="class" reportRef={detail.code} />
       {mine && (
         <>
-          <ClassFormSheet visible={editOpen} onClose={() => setEditOpen(false)} initial={{ name: detail.name, description: detail.description }} onSubmit={onEdit} />
+          <ClassFormSheet visible={editOpen} onClose={() => setEditOpen(false)} initial={{ name: detail.name, description: detail.description, approval: detail.approval }} onSubmit={onEdit} />
           <AddPostSheet visible={addOpen} onClose={() => setAddOpen(false)} onPost={onPost} />
           <NoteSheet visible={!!noteFor} onClose={() => setNoteFor(null)} initial={noteFor?.note ?? ''} onSave={onSaveNote} />
         </>
       )}
     </Screen>
+  );
+}
+
+/** The teacher's way to the member list: how many are in, and how many are asking. */
+function MembersRow({ memberCount, requestCount, onPress }: { memberCount: number; requestCount: number; onPress: () => void }) {
+  const t = useT();
+  const members = memberCount ? t.classes.membersCount(memberCount) : t.classes.noMembers;
+  const requests = requestCount ? t.classes.requestsCount(requestCount) : '';
+  return (
+    <Card onPress={onPress} accessibilityLabel={t.classes.membersA11y(members, requests)} contentStyle={s.postRow} padding={space.m} testID="class-members">
+      <View style={[s.membersTile, { backgroundColor: ROLE_COLOR.follower.tint }]}>
+        <Icon name="people" size={22} color={ROLE_COLOR.follower.deep} />
+      </View>
+      <View style={s.postText}>
+        <Text variant="label">{t.classes.members}</Text>
+        <Text variant="caption" color="ink2" style={s.postNote}>
+          {members}
+        </Text>
+      </View>
+      {!!requests && (
+        <View style={s.requests} testID="class-requests">
+          <Text variant="caption" color="onColor">
+            {requests}
+          </Text>
+        </View>
+      )}
+      <Icon name="chevron-right" size={22} color={colors.ink3} />
+    </Card>
   );
 }
 
@@ -360,6 +439,9 @@ const s = StyleSheet.create({
   postRow: { flexDirection: 'row', alignItems: 'center', gap: space.m },
   postText: { flex: 1, minWidth: 0 },
   postNote: { marginTop: 2 },
+  membersTile: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  requests: { paddingHorizontal: space.s, paddingVertical: 2, borderRadius: radius.xs, backgroundColor: colors.primary },
+  hidden: { display: 'none' },
   blocked: { paddingTop: space.xl },
   skel: { gap: space.m, paddingTop: space.s },
   skelGap: { marginTop: space.m },
